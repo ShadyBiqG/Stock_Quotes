@@ -76,19 +76,27 @@ if errorlevel 1 (
 echo ✅ Все зависимости установлены
 echo.
 
-REM Проверка файлов
-if not exist "config.yaml" (
-    echo ❌ config.yaml не найден!
+REM Проверка файлов конфигурации
+if not exist "config\api_keys.yaml" (
+    echo ❌ config\api_keys.yaml не найден!
+    echo Создайте файл из примера: copy config\api_keys.example.yaml config\api_keys.yaml
+    pause
+    exit /b 1
+)
+
+if not exist "config\llm_config.yaml" (
+    echo ❌ config\llm_config.yaml не найден!
+    echo Создайте файл из примера: copy config\llm_config.example.yaml config\llm_config.yaml
     pause
     exit /b 1
 )
 
 REM Проверка API ключа (предупреждение, но не блокировка)
-findstr /C:"your-openrouter-api-key-here" config.yaml >nul
+findstr /C:"your-openrouter-api-key-here" config\api_keys.yaml >nul
 if not errorlevel 1 (
     echo.
     echo ⚠️  ВНИМАНИЕ: API ключ не настроен!
-    echo    Настройте ключ в config.yaml для работы анализа
+    echo    Настройте ключ в config\api_keys.yaml для работы анализа
     echo    https://openrouter.ai/
     echo.
 )

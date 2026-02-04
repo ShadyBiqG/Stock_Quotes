@@ -79,10 +79,17 @@ if not exist "logs\" mkdir logs
 if not exist "dashboards\" mkdir dashboards
 echo ✅ Структура папок создана
 
-REM Проверка файлов
-if not exist "config.yaml" (
-    echo ❌ Файл config.yaml не найден!
-    echo Скопируйте его из репозитория или создайте из config.example.yaml
+REM Проверка файлов конфигурации
+if not exist "config\api_keys.yaml" (
+    echo ❌ Файл config\api_keys.yaml не найден!
+    echo Создайте файл из примера: copy config\api_keys.example.yaml config\api_keys.yaml
+    pause
+    exit /b 1
+)
+
+if not exist "config\llm_config.yaml" (
+    echo ❌ Файл config\llm_config.yaml не найден!
+    echo Создайте файл из примера: copy config\llm_config.example.yaml config\llm_config.yaml
     pause
     exit /b 1
 )
@@ -141,13 +148,13 @@ if not exist "dashboards\settings.py" (
 echo ✅ Все критические модули найдены
 
 REM Проверка API ключа
-findstr /C:"your-openrouter-api-key-here" config.yaml >nul
+findstr /C:"your-openrouter-api-key-here" config\api_keys.yaml >nul
 if not errorlevel 1 (
     echo.
     echo ⚠️  ВНИМАНИЕ: API ключ не настроен!
     echo.
-    echo Откройте config.yaml и замените:
-    echo   api_key: "your-openrouter-api-key-here"
+    echo Откройте config\api_keys.yaml и замените:
+    echo   openrouter_api_key: "your-openrouter-api-key-here"
     echo на ваш ключ с https://openrouter.ai/
     echo.
     echo Или установите переменную окружения:
@@ -179,7 +186,7 @@ echo.
 echo 🔑 Настройка API ключа:
 echo    1. Зарегистрируйтесь на https://openrouter.ai/
 echo    2. Получите API ключ
-echo    3. Откройте config.yaml
+echo    3. Откройте config\api_keys.yaml и добавьте ваш API ключ
 echo    4. Замените api_key на ваш ключ
 echo    5. Пополните баланс ($10-20 для начала)
 echo.

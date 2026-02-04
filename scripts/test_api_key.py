@@ -25,34 +25,40 @@ def test_api_key():
     print("="*70)
     print()
     
-    # Загрузка конфигурации
-    config_path = Path(__file__).parent.parent / "config.yaml"
+    # Загрузка конфигурации из структуры config/
+    import os
+    root_dir = Path(__file__).parent.parent
+    api_keys_path = root_dir / "config" / "api_keys.yaml"
     
-    if not config_path.exists():
-        print("❌ Файл config.yaml не найден!")
-        print(f"   Ожидается: {config_path}")
+    if not api_keys_path.exists():
+        print("❌ Файл config/api_keys.yaml не найден!")
+        print(f"   Ожидается: {api_keys_path}")
+        print()
+        print("Создайте файл config/api_keys.yaml:")
+        print("  openrouter_api_key: \"sk-or-v1-ваш-ключ-здесь\"")
         return False
     
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
+        with open(api_keys_path, 'r', encoding='utf-8') as f:
+            api_keys = yaml.safe_load(f)
     except Exception as e:
-        print(f"❌ Ошибка чтения config.yaml: {e}")
+        print(f"❌ Ошибка чтения config/api_keys.yaml: {e}")
         return False
     
-    # Получение API ключа
-    api_key = config.get('openrouter', {}).get('api_key', '')
-    base_url = config.get('openrouter', {}).get('base_url', 'https://openrouter.ai/api/v1')
+    # Получение API ключа (переменная окружения имеет приоритет)
+    api_key = os.getenv('OPENROUTER_API_KEY') or api_keys.get('openrouter_api_key', '')
+    base_url = 'https://openrouter.ai/api/v1'
     
     if not api_key:
-        print("❌ API ключ не настроен в config.yaml!")
+        print("❌ API ключ не настроен в config/api_keys.yaml!")
+        print("   Или установите переменную окружения OPENROUTER_API_KEY")
         return False
     
     if api_key == "your-openrouter-api-key-here":
         print("❌ API ключ не изменен (используется пример)!")
         print()
-        print("Замените ключ в config.yaml:")
-        print('  api_key: "sk-or-v1-ваш-ключ-здесь"')
+        print("Замените ключ в config/api_keys.yaml:")
+        print('  openrouter_api_key: "sk-or-v1-ваш-ключ-здесь"')
         return False
     
     print(f"🔑 API ключ: {api_key[:20]}...{api_key[-10:]}")
@@ -136,7 +142,7 @@ def test_api_key():
             print("2. Проверьте статус ключа")
             print("3. Создайте новый ключ если нужно")
             print("4. Проверьте баланс: https://openrouter.ai/credits")
-            print("5. Обновите ключ в config.yaml")
+            print("5. Обновите ключ в config/api_keys.yaml")
             
             return False
             

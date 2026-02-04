@@ -45,9 +45,17 @@ if errorlevel 1 (
 echo ✅ Зависимости в порядке
 echo.
 
-REM Проверка файлов
-if not exist "config.yaml" (
-    echo ❌ config.yaml не найден!
+REM Проверка файлов конфигурации
+if not exist "config\api_keys.yaml" (
+    echo ❌ config\api_keys.yaml не найден!
+    echo Создайте файл из примера: copy config\api_keys.example.yaml config\api_keys.yaml
+    pause
+    exit /b 1
+)
+
+if not exist "config\llm_config.yaml" (
+    echo ❌ config\llm_config.yaml не найден!
+    echo Создайте файл из примера: copy config\llm_config.example.yaml config\llm_config.yaml
     pause
     exit /b 1
 )

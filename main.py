@@ -56,12 +56,12 @@ def setup_logging(config: dict) -> None:
 
 def load_config() -> dict:
     """
-    Загрузка конфигурации (v3.0: поддержка новой структуры)
+    Загрузка конфигурации из структуры config/
     
     Returns:
         Словарь с конфигурацией
     """
-    # v3.0: Проверка новой структуры config/
+    # Проверка структуры config/
     config_dir = Path("config")
     api_keys_path = config_dir / "api_keys.yaml"
     llm_config_path = config_dir / "llm_config.yaml"
@@ -119,29 +119,17 @@ def load_config() -> dict:
         
         return config
     
-    # Fallback на старый config.yaml
-    config_path = Path("config.yaml")
-    if config_path.exists():
-        # logger еще не инициализирован, используем print
-        print("⚠️  Используется старый формат config.yaml. Рекомендуется миграция на v3.0")
-        print("    Запустите: python scripts/migrate_to_v3.py")
-        
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        
-        # Проверка API ключа через переменную окружения
-        api_key = os.getenv('OPENROUTER_API_KEY')
-        if api_key:
-            config['openrouter']['api_key'] = api_key
-        
-        return config
-    
-    # Ничего не найдено
+    # Конфигурация не найдена
     raise FileNotFoundError(
         "Конфигурация не найдена!\n"
-        "v3.0: Создайте файлы config/api_keys.yaml, config/llm_config.yaml, config/companies.json\n"
-        "Legacy: Скопируйте config.yaml.example в config.yaml\n"
-        "Или запустите: python scripts/migrate_to_v3.py"
+        "Создайте файлы:\n"
+        "  - config/api_keys.yaml (API ключи)\n"
+        "  - config/llm_config.yaml (настройки LLM и проекта)\n"
+        "  - config/companies.json (список компаний)\n\n"
+        "Примеры файлов:\n"
+        "  - config/api_keys.example.yaml\n"
+        "  - config/llm_config.example.yaml\n"
+        "  - config/companies.example.json"
     )
 
 
@@ -222,7 +210,7 @@ async def main():
         excel_file = config.get('input', {}).get('excel_file', 'data/samples/Stock quotes.xlsx')
         if not Path(excel_file).exists():
             print(f"❌ Файл {excel_file} не найден!")
-            print("   Проверьте путь к файлу в config.yaml (параметр input.excel_file)")
+            print("   Проверьте путь к файлу в config/llm_config.yaml (параметр input.excel_file)")
             print(f"   Или поместите файл по пути: {excel_file}")
             return
         

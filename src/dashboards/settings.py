@@ -280,7 +280,7 @@ def show(config: dict):
         
         if not api_key or api_key == "your-openrouter-api-key-here":
             st.error("❌ OpenRouter API ключ не настроен!")
-            st.info("💡 Настройте ключ в config.yaml или переменной окружения OPENROUTER_API_KEY")
+            st.info("💡 Настройте ключ в config/api_keys.yaml или переменной окружения OPENROUTER_API_KEY")
             
             with st.expander("📝 Как получить API ключ"):
                 st.markdown("""
@@ -288,7 +288,7 @@ def show(config: dict):
                 2. Перейдите в раздел "Keys"
                 3. Создайте новый API ключ
                 4. Пополните баланс ($10-20 для начала)
-                5. Добавьте ключ в config.yaml
+                5. Добавьте ключ в config/api_keys.yaml
                 """)
             
             return
@@ -606,7 +606,7 @@ def show(config: dict):
         
         # === СИСТЕМНЫЕ НАСТРОЙКИ ===
         st.markdown("#### ⚙️ Системные настройки")
-        st.info("💡 Текущие настройки из config.yaml")
+        st.info("💡 Текущие настройки из config/llm_config.yaml и config/api_keys.yaml")
         
         # OpenRouter
         with st.expander("🔑 OpenRouter API"):
@@ -641,7 +641,9 @@ def show(config: dict):
             st.code(f"LLM модель: {config['company_info']['llm_model']}")
         
         st.markdown("---")
-        st.warning("⚠️ Для изменения системных настроек отредактируйте файл config.yaml")
+        st.warning("⚠️ Для изменения системных настроек отредактируйте файлы:\n"
+                   "- config/api_keys.yaml (API ключи)\n"
+                   "- config/llm_config.yaml (настройки проекта)")
     
     # === ВКЛАДКА: ИНФОРМАЦИЯ ===
     with tab4:

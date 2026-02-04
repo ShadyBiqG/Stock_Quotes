@@ -37,8 +37,13 @@ echo [3/6] 📁 Проверка структуры проекта...
 
 set MISSING_FILES=0
 
-if not exist "config.yaml" (
-    echo ❌ config.yaml не найден
+if not exist "config\api_keys.yaml" (
+    echo ❌ config\api_keys.yaml не найден
+    set MISSING_FILES=1
+)
+
+if not exist "config\llm_config.yaml" (
+    echo ❌ config\llm_config.yaml не найден
     set MISSING_FILES=1
 )
 
@@ -95,11 +100,11 @@ echo.
 REM ========== ПРОВЕРКА API КЛЮЧА ==========
 echo [4/6] 🔑 Проверка API ключа...
 
-findstr /C:"your-openrouter-api-key-here" config.yaml >nul
+findstr /C:"your-openrouter-api-key-here" config\api_keys.yaml >nul
 if not errorlevel 1 (
     echo ❌ API ключ не настроен!
     echo.
-    echo Откройте config.yaml и настройте API ключ:
+    echo Откройте config\api_keys.yaml и настройте API ключ:
     echo 1. Зарегистрируйтесь на https://openrouter.ai/
     echo 2. Получите API ключ
     echo 3. Замените "your-openrouter-api-key-here" на ваш ключ

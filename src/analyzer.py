@@ -334,13 +334,40 @@ class StockAnalyzer:
 # Пример использования
 if __name__ == "__main__":
     import yaml
+    import os
+    from pathlib import Path
     from .data_loader import load_stock_data
     
     logging.basicConfig(level=logging.INFO)
     
-    # Загрузка конфигурации
-    with open("../config.yaml", 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
+    # Загрузка конфигурации из структуры config/
+    config_dir = Path("../config")
+    api_keys_path = config_dir / "api_keys.yaml"
+    llm_config_path = config_dir / "llm_config.yaml"
+    
+    if not api_keys_path.exists() or not llm_config_path.exists():
+        raise FileNotFoundError("Конфигурация не найдена! Создайте config/api_keys.yaml и config/llm_config.yaml")
+    
+    config = {}
+    with open(api_keys_path, 'r', encoding='utf-8') as f:
+        api_keys = yaml.safe_load(f)
+        config['openrouter'] = {
+            'api_key': api_keys.get('openrouter_api_key', '') or os.getenv('OPENROUTER_API_KEY', ''),
+            'base_url': 'https://openrouter.ai/api/v1'
+        }
+        saved_alphavantage_key = api_keys.get('alphavantage_api_key', '')
+    
+    with open(llm_config_path, 'r', encoding='utf-8') as f:
+        llm_config = yaml.safe_load(f)
+        saved_api_key = config['openrouter']['api_key']
+        saved_base_url = config['openrouter']['base_url']
+        config.update(llm_config)
+        if 'openrouter' not in config:
+            config['openrouter'] = {}
+        config['openrouter']['api_key'] = saved_api_key
+        if 'company_info' not in config:
+            config['company_info'] = {}
+        config['company_info']['alphavantage_api_key'] = saved_alphavantage_key
     
     # Инициализация компонентов
     llm_client = OpenRouterClient(

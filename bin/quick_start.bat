@@ -48,15 +48,38 @@ if exist "config\api_keys.yaml" (
     )
 )
 
-REM Проверка старой структуры
+REM Проверка новой структуры конфигурации
+if not exist "config\api_keys.yaml" (
+    echo ❌ config\api_keys.yaml не найден!
+    echo Создайте файл из примера: copy config\api_keys.example.yaml config\api_keys.yaml
+    set MISSING_FILES=1
+)
+
+if not exist "config\llm_config.yaml" (
+    echo ❌ config\llm_config.yaml не найден!
+    echo Создайте файл из примера: copy config\llm_config.example.yaml config\llm_config.yaml
+    set MISSING_FILES=1
+)
+
+if "%MISSING_FILES%"=="1" (
+    echo.
+    echo Для создания файлов конфигурации выполните:
+    echo   copy config\api_keys.example.yaml config\api_keys.yaml
+    echo   copy config\llm_config.example.yaml config\llm_config.yaml
+    echo.
+    pause
+    exit /b 1
+)
+
+REM Старая проверка миграции (удалена, так как v2.x не поддерживается)
 if exist "config.yaml" (
-    echo ⚠️  Найден старый config.yaml
+    echo ⚠️  Обнаружен старый config.yaml (v2.x больше не поддерживается)
+    echo    Удалите config.yaml и используйте новую структуру:
+    echo    - config\api_keys.yaml
+    echo    - config\llm_config.yaml
     echo.
-    echo 💡 Рекомендуется миграция на v3.0
-    echo    Запустите: python scripts\migrate_to_v3.py
-    echo.
-    set /p MIGRATE="Запустить миграцию сейчас? [y/N]: "
-    if /i "%MIGRATE%"=="y" (
+    set /p DELETE="Удалить старый config.yaml? [y/N]: "
+    if /i "%DELETE%"=="y" (
         echo.
         echo Запуск миграции...
         python scripts\migrate_to_v3.py
@@ -143,11 +166,11 @@ echo.
 REM ========== ПРОВЕРКА API КЛЮЧА ==========
 echo [4/6] 🔑 Проверка API ключа...
 
-findstr /C:"your-openrouter-api-key-here" config.yaml >nul
+findstr /C:"your-openrouter-api-key-here" config\api_keys.yaml >nul
 if not errorlevel 1 (
     echo ❌ API ключ не настроен!
     echo.
-    echo Откройте config.yaml и настройте API ключ:
+    echo Откройте config\api_keys.yaml и настройте API ключ:
     echo 1. Зарегистрируйтесь на https://openrouter.ai/
     echo 2. Получите API ключ
     echo 3. Замените "your-openrouter-api-key-here" на ваш ключ

@@ -61,8 +61,8 @@ def check_paths():
     print("2. КРИТИЧНЫЕ ФАЙЛЫ")
     print("-" * 70)
     required_files = [
-        "config.yaml",
-        "config.example.yaml",
+        "config/api_keys.yaml",
+        "config/llm_config.yaml",
         "main.py",
         "app.py",
         "scheduler.py",
@@ -100,17 +100,24 @@ def check_paths():
     print("3. КОНФИГУРАЦИЯ")
     print("-" * 70)
     
-    config_path = root / "config.yaml"
-    if config_path.exists():
+    api_keys_path = root / "config" / "api_keys.yaml"
+    llm_config_path = root / "config" / "llm_config.yaml"
+    
+    if api_keys_path.exists() and llm_config_path.exists():
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
+            # Загрузка API ключей
+            with open(api_keys_path, 'r', encoding='utf-8') as f:
+                api_keys = yaml.safe_load(f)
+            
+            # Загрузка LLM конфигурации
+            with open(llm_config_path, 'r', encoding='utf-8') as f:
+                llm_config = yaml.safe_load(f)
             
             # Проверка API ключа
-            api_key = config.get('openrouter', {}).get('api_key', '')
+            api_key = api_keys.get('openrouter_api_key', '')
             if not api_key:
                 print("❌ API ключ не настроен!")
-                errors.append("API ключ отсутствует в config.yaml")
+                errors.append("API ключ отсутствует в config/api_keys.yaml")
             elif api_key == "your-openrouter-api-key-here":
                 print("❌ API ключ не изменен (используется пример)!")
                 errors.append("API ключ не изменен с примера")
@@ -126,23 +133,31 @@ def check_paths():
                 print("   3. Ключ не удален и не просрочен")
             
             # Проверка моделей
-            models = config.get('models', [])
+            models = llm_config.get('models', [])
             print(f"\n✅ Настроено моделей: {len(models)}")
             for model in models:
                 print(f"   - {model.get('name')}: {model.get('id')}")
             
             # Проверка пути к файлу данных
-            excel_file = config.get('input', {}).get('excel_file', 'data/samples/Stock quotes.xlsx')
-            excel_path = root / excel_file
-            if excel_path.exists():
-                size = excel_path.stat().st_size / 1024  # KB
-                print(f"\n✅ Путь к данным: {excel_file} ({size:.1f} KB)")
+            companies_path = root / "config" / "companies.json"
+            if companies_path.exists():
+                size = companies_path.stat().st_size / 1024  # KB
+                print(f"\n✅ Список компаний: config/companies.json ({size:.1f} KB)")
             else:
-                print(f"\n❌ Путь к данным: {excel_file} - ФАЙЛ НЕ НАЙДЕН!")
-                errors.append(f"Файл данных не найден: {excel_file}")
+                excel_file = llm_config.get('input', {}).get('excel_file', '')
+                if excel_file:
+                    excel_path = root / excel_file
+                    if excel_path.exists():
+                        size = excel_path.stat().st_size / 1024  # KB
+                        print(f"\n✅ Путь к данным: {excel_file} ({size:.1f} KB)")
+                    else:
+                        print(f"\n❌ Путь к данным: {excel_file} - ФАЙЛ НЕ НАЙДЕН!")
+                        errors.append(f"Файл данных не найден: {excel_file}")
+                else:
+                    print(f"\n⚠️  Файл компаний не указан")
             
             # Проверка БД
-            db_path = root / config.get('database', {}).get('path', 'data/stock_analysis.db')
+            db_path = root / llm_config.get('database', {}).get('path', 'data/stock_analysis.db')
             if db_path.exists():
                 size = db_path.stat().st_size / 1024  # KB
                 print(f"✅ База данных: {db_path.name} ({size:.1f} KB)")
@@ -150,11 +165,16 @@ def check_paths():
                 print(f"⚠️  База данных не найдена (будет создана при первом запуске)")
             
         except Exception as e:
-            print(f"❌ Ошибка чтения config.yaml: {e}")
-            errors.append(f"Ошибка чтения config.yaml: {e}")
+            print(f"❌ Ошибка чтения конфигурации: {e}")
+            errors.append(f"Ошибка чтения конфигурации: {e}")
     else:
-        print("❌ Файл config.yaml не найден!")
-        errors.append("Файл config.yaml не найден")
+        print("❌ Файлы конфигурации не найдены!")
+        if not api_keys_path.exists():
+            print(f"   ❌ Отсутствует: config/api_keys.yaml")
+            errors.append("Файл config/api_keys.yaml не найден")
+        if not llm_config_path.exists():
+            print(f"   ❌ Отсутствует: config/llm_config.yaml")
+            errors.append("Файл config/llm_config.yaml не найден")
     
     print()
     
@@ -217,10 +237,9 @@ def check_paths():
 3. Если ключ удален - создайте новый
 4. Проверьте баланс на https://openrouter.ai/credits
 5. Пополните баланс если нужно ($5-10 для начала)
-6. Обновите ключ в config.yaml:
+6. Обновите ключ в config/api_keys.yaml:
    
-   openrouter:
-     api_key: "sk-or-v1-ваш-новый-ключ"
+   openrouter_api_key: "sk-or-v1-ваш-новый-ключ"
 
 7. Перезапустите приложение
 

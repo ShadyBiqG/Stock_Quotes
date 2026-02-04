@@ -140,10 +140,16 @@ REM Проверка файлов проекта
 echo [5] Проверка файлов проекта...
 echo.
 
-if exist "config.yaml" (
-    echo ✅ config.yaml найден
+if exist "config\api_keys.yaml" (
+    echo ✅ config\api_keys.yaml найден
 ) else (
-    echo ❌ config.yaml не найден
+    echo ❌ config\api_keys.yaml не найден
+)
+
+if exist "config\llm_config.yaml" (
+    echo ✅ config\llm_config.yaml найден
+) else (
+    echo ❌ config\llm_config.yaml не найден
 )
 
 if exist "Stock quotes.xlsx" (
@@ -174,16 +180,16 @@ echo.
 
 REM Проверка API ключа
 echo [6] Проверка конфигурации...
-if exist "config.yaml" (
-    findstr /C:"your-openrouter-api-key-here" config.yaml >nul
+if exist "config\api_keys.yaml" (
+    findstr /C:"your-openrouter-api-key-here" config\api_keys.yaml >nul
     if not errorlevel 1 (
-        echo ⚠️  API ключ не настроен в config.yaml
-        echo    Откройте config.yaml и добавьте ваш ключ
+        echo ⚠️  API ключ не настроен в config\api_keys.yaml
+        echo    Откройте config\api_keys.yaml и добавьте ваш ключ
     ) else (
-        echo ✅ API ключ настроен в config.yaml
+        echo ✅ API ключ настроен в config\api_keys.yaml
     )
 ) else (
-    echo ❌ config.yaml не найден
+    echo ❌ config\api_keys.yaml не найден
 )
 
 echo.

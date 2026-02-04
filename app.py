@@ -22,7 +22,7 @@ st.set_page_config(
 # Загрузка конфигурации
 @st.cache_resource
 def load_config():
-    """Загрузка конфигурации (v3.0: поддержка новой структуры)"""
+    """Загрузка конфигурации из структуры config/"""
     import logging
     from pathlib import Path
     
@@ -81,14 +81,12 @@ def load_config():
             
             return config
         
-        # Fallback на старый config.yaml
-        config_path = Path("config.yaml")
-        if config_path.exists():
-            st.warning("⚠️ Используется старый формат config.yaml. Рекомендуется миграция на v3.0")
-            with open(config_path, 'r', encoding='utf-8') as f:
-                return yaml.safe_load(f)
-        
-        st.error("Конфигурация не найдена! Создайте config/api_keys.yaml и config/llm_config.yaml")
+        # Конфигурация не найдена
+        st.error("Конфигурация не найдена!")
+        st.info("Создайте файлы:\n"
+                "- config/api_keys.yaml (API ключи)\n"
+                "- config/llm_config.yaml (настройки LLM и проекта)\n"
+                "- config/companies.json (список компаний)")
         return None
         
     except Exception as e:
