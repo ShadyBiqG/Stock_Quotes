@@ -1,10 +1,18 @@
 # API ключи и конфигурация (КРИТИЧНО!)
 config.yaml
+config_backup_*.yaml
 .env
 *.env
 
-# Но сохраняем пример конфигурации
+# v3.0: Новая структура конфигурации
+config/api_keys.yaml
+config/llm_config.yaml
+config/companies.json
+
+# Но сохраняем примеры конфигурации
 !config.example.yaml
+!config/*.example.yaml
+!config/*.example.json
 !deploy/.env.example
 
 # База данных

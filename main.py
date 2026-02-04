@@ -25,6 +25,7 @@ from src.llm_manager import OpenRouterClient
 from src.company_info import CompanyInfoProvider
 from src.analyzer import StockAnalyzer
 from src.excel_exporter import ExcelExporter
+from src.price_fetcher import YahooFinanceFetcher
 
 
 def setup_logging(config: dict) -> None:
@@ -55,28 +56,93 @@ def setup_logging(config: dict) -> None:
 
 def load_config() -> dict:
     """
-    Загрузка конфигурации
+    Загрузка конфигурации (v3.0: поддержка новой структуры)
     
     Returns:
         Словарь с конфигурацией
     """
+    # v3.0: Проверка новой структуры config/
+    config_dir = Path("config")
+    api_keys_path = config_dir / "api_keys.yaml"
+    llm_config_path = config_dir / "llm_config.yaml"
+    companies_path = config_dir / "companies.json"
+    
+    # Если есть новая структура - используем её
+    if api_keys_path.exists() and llm_config_path.exists():
+        # logger еще не инициализирован на этом этапе
+        config = {}
+        
+        # API ключи
+        with open(api_keys_path, 'r', encoding='utf-8') as f:
+            api_keys = yaml.safe_load(f)
+            config['openrouter'] = {
+                'api_key': api_keys.get('openrouter_api_key', ''),
+                'base_url': 'https://openrouter.ai/api/v1'
+            }
+            # Сохраняем alphavantage_api_key отдельно
+            saved_alphavantage_key = api_keys.get('alphavantage_api_key', '')
+        
+        # LLM конфигурация
+        with open(llm_config_path, 'r', encoding='utf-8') as f:
+            llm_config = yaml.safe_load(f)
+            # Сохраняем api_key перед обновлением
+            saved_api_key = config['openrouter']['api_key']
+            saved_base_url = config['openrouter']['base_url']
+            
+            config.update(llm_config)
+            
+            # Восстанавливаем api_key и обновляем base_url
+            if 'openrouter' not in config:
+                config['openrouter'] = {}
+            config['openrouter']['api_key'] = saved_api_key
+            if 'openrouter' in llm_config and 'base_url' in llm_config['openrouter']:
+                config['openrouter']['base_url'] = llm_config['openrouter']['base_url']
+            else:
+                config['openrouter']['base_url'] = saved_base_url
+            
+            # Добавляем alphavantage_api_key в company_info
+            if 'company_info' not in config:
+                config['company_info'] = {}
+            config['company_info']['alphavantage_api_key'] = saved_alphavantage_key
+        
+        # Путь к списку компаний
+        if companies_path.exists():
+            config['input'] = {'excel_file': str(companies_path)}
+        else:
+            # logger еще не инициализирован
+            config['input'] = {'excel_file': ''}
+        
+        # Переменные окружения имеют приоритет
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if api_key:
+            config['openrouter']['api_key'] = api_key
+        
+        return config
+    
+    # Fallback на старый config.yaml
     config_path = Path("config.yaml")
+    if config_path.exists():
+        # logger еще не инициализирован, используем print
+        print("⚠️  Используется старый формат config.yaml. Рекомендуется миграция на v3.0")
+        print("    Запустите: python scripts/migrate_to_v3.py")
+        
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        # Проверка API ключа через переменную окружения
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if api_key:
+            config['openrouter']['api_key'] = api_key
+        
+        return config
     
-    if not config_path.exists():
-        raise FileNotFoundError(
-            "Файл config.yaml не найден! "
-            "Скопируйте config.yaml.example и настройте параметры."
-        )
-    
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    # Проверка API ключа через переменную окружения
-    api_key = os.getenv('OPENROUTER_API_KEY')
-    if api_key:
-        config['openrouter']['api_key'] = api_key
-    
-    return config
+    # Ничего не найдено
+    raise FileNotFoundError(
+        "Конфигурация не найдена!\n"
+        "v3.0: Создайте файлы config/api_keys.yaml, config/llm_config.yaml, config/companies.json\n"
+        "Legacy: Скопируйте config.yaml.example в config.yaml\n"
+        "Или запустите: python scripts/migrate_to_v3.py"
+    )
 
 
 def print_banner() -> None:
@@ -153,10 +219,11 @@ async def main():
         logger.info("="*60)
         
         # Поиск Excel файла
-        excel_file = "Stock quotes.xlsx"
+        excel_file = config.get('input', {}).get('excel_file', 'data/samples/Stock quotes.xlsx')
         if not Path(excel_file).exists():
             print(f"❌ Файл {excel_file} не найден!")
-            print("   Поместите файл с котировками в текущую директорию.")
+            print("   Проверьте путь к файлу в config.yaml (параметр input.excel_file)")
+            print(f"   Или поместите файл по пути: {excel_file}")
             return
         
         # Инициализация компонентов
@@ -177,9 +244,13 @@ async def main():
         db = Database(config['database']['path'])
         print(f"   ✅ База данных: {config['database']['path']}")
         
+        # Price Fetcher (v3.0)
+        price_fetcher = YahooFinanceFetcher()
+        print("   ✅ Yahoo Finance Fetcher")
+        
         # Загрузка данных (используется БД для получения котировок)
         print(f"\n📂 Загрузка тикеров из {excel_file}...")
-        stocks = load_stock_data(excel_file, database=db)
+        stocks = load_stock_data(excel_file, database=db, price_fetcher=price_fetcher, config=config)
         
         if not stocks:
             print("❌ Не удалось загрузить данные из файла!")

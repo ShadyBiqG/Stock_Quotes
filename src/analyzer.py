@@ -351,7 +351,7 @@ if __name__ == "__main__":
     analyzer = StockAnalyzer(llm_client, db, company_provider, config)
     
     # Загрузка данных
-    stocks = load_stock_data("Stock quotes.xlsx")
+    stocks = load_stock_data("data/samples/Stock quotes.xlsx")
     
     # Запуск анализа
     stats = asyncio.run(analyzer.analyze_stocks(stocks))

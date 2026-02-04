@@ -1,0 +1,23 @@
+{
+  "companies": [
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "sector": "Technology",
+      "industry": "Consumer Electronics"
+    },
+    {
+      "ticker": "GOOGL",
+      "name": "Alphabet Inc.",
+      "sector": "Technology",
+      "industry": "Internet Content & Information"
+    },
+    {
+      "ticker": "MSFT",
+      "name": "Microsoft Corporation",
+      "sector": "Technology",
+      "industry": "Software"
+    }
+  ],
+  "last_updated": "2026-02-04T12:00:00"
+}

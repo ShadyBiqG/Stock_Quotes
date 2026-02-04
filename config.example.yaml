@@ -62,6 +62,10 @@ user_prompt_template: |
   - Reason: КРАТКОЕ объяснение (2-3 предложения, БЕЗ выдуманных фактов)
 
 # База данных
+# Путь к файлу с котировками
+input:
+  excel_file: "data/samples/Stock quotes.xlsx"  # Путь к Excel файлу с котировками
+
 database:
   path: "data/stock_analysis.db"
 

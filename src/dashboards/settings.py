@@ -4,10 +4,11 @@
 
 import streamlit as st
 import yaml
+import json
 import asyncio
 from pathlib import Path
 import sys
-from datetime import date
+from datetime import date, datetime
 import os
 import logging
 
@@ -19,6 +20,130 @@ from src.llm_manager import OpenRouterClient
 from src.company_info import CompanyInfoProvider
 from src.analyzer import StockAnalyzer
 from src.excel_exporter import ExcelExporter
+from src.price_fetcher import YahooFinanceFetcher
+
+
+def save_company_to_json(ticker: str, company_info: dict) -> bool:
+    """
+    Сохранение компании в companies.json (v3.0)
+    
+    Args:
+        ticker: Тикер компании
+        company_info: Информация о компании
+        
+    Returns:
+        True если успешно, False при ошибке
+    """
+    try:
+        json_path = Path('config/companies.json')
+        
+        # Создание файла если не существует
+        if not json_path.exists():
+            json_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {'companies': [], 'last_updated': datetime.now().isoformat()}
+        else:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        
+        # Проверка на дубликат
+        if not any(c.get('ticker') == ticker for c in data['companies']):
+            data['companies'].append({
+                'ticker': ticker,
+                'name': company_info.get('name', ''),
+                'sector': company_info.get('sector', ''),
+                'industry': company_info.get('industry', '')
+            })
+            data['last_updated'] = datetime.now().isoformat()
+            
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            
+            return True
+        
+        return False
+        
+    except Exception as e:
+        logging.error(f"Ошибка сохранения в companies.json: {e}")
+        return False
+
+
+def remove_company_from_json(ticker: str) -> bool:
+    """
+    Удаление компании из companies.json (v3.0)
+    
+    Args:
+        ticker: Тикер компании
+        
+    Returns:
+        True если успешно, False при ошибке
+    """
+    try:
+        json_path = Path('config/companies.json')
+        
+        if not json_path.exists():
+            return True
+        
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Удаление компании
+        original_count = len(data['companies'])
+        data['companies'] = [c for c in data['companies'] if c.get('ticker') != ticker]
+        
+        if len(data['companies']) < original_count:
+            data['last_updated'] = datetime.now().isoformat()
+            
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            
+            return True
+        
+        return False
+        
+    except Exception as e:
+        logging.error(f"Ошибка удаления из companies.json: {e}")
+        return False
+
+
+def export_companies_to_json(db: Database) -> bool:
+    """
+    Экспорт всех компаний из БД в companies.json (v3.0)
+    
+    Args:
+        db: Экземпляр Database
+        
+    Returns:
+        True если успешно, False при ошибке
+    """
+    try:
+        json_path = Path('config/companies.json')
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Загрузка всех компаний из БД
+        db.cursor.execute("SELECT ticker, name, sector, industry FROM companies ORDER BY ticker")
+        companies = []
+        
+        for row in db.cursor.fetchall():
+            companies.append({
+                'ticker': row['ticker'],
+                'name': row['name'] or '',
+                'sector': row['sector'] or '',
+                'industry': row['industry'] or ''
+            })
+        
+        data = {
+            'companies': companies,
+            'last_updated': datetime.now().isoformat()
+        }
+        
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        return True
+        
+    except Exception as e:
+        logging.error(f"Ошибка экспорта в companies.json: {e}")
+        return False
 
 
 def show(config: dict):
@@ -54,7 +179,8 @@ def show(config: dict):
         
         if uploaded_file:
             # Сохранение файла
-            save_path = Path("Stock quotes.xlsx")
+            save_path = Path("data/samples/Stock quotes.xlsx")
+            save_path.parent.mkdir(parents=True, exist_ok=True)
             with open(save_path, 'wb') as f:
                 f.write(uploaded_file.getvalue())
             
@@ -94,7 +220,7 @@ def show(config: dict):
         
         else:
             # Использовать существующий файл
-            default_file = Path("Stock quotes.xlsx")
+            default_file = Path("data/samples/Stock quotes.xlsx")
             if default_file.exists():
                 st.info(f"📁 Используется существующий файл: {default_file}")
                 
@@ -123,7 +249,7 @@ def show(config: dict):
                     st.error(f"❌ Ошибка чтения файла: {e}")
                     return
             else:
-                st.warning("⚠️ Файл Stock quotes.xlsx не найден. Загрузите файл выше.")
+                st.warning("⚠️ Файл data/samples/Stock quotes.xlsx не найден. Загрузите файл выше.")
                 return
         
         st.markdown("---")
@@ -322,8 +448,12 @@ def show(config: dict):
                                     
                                     info = company_provider.get_company_info(new_ticker, use_cache=False)
                                     
+                                    # Получение текущей цены через Yahoo Finance (v3.0)
+                                    price_fetcher = YahooFinanceFetcher()
+                                    price_data = price_fetcher.get_current_price(new_ticker)
+                                    
                                     # Сохранение в БД
-                                    db.get_or_create_company(
+                                    company_id = db.get_or_create_company(
                                         ticker=new_ticker,
                                         name=info.get('name', ''),
                                         description=info.get('description', ''),
@@ -331,9 +461,29 @@ def show(config: dict):
                                         industry=info.get('industry', '')
                                     )
                                     
-                                    st.success(f"✅ Компания {new_ticker} добавлена!")
+                                    # Сохранение котировки
+                                    stock_id = db.save_stock(
+                                        ticker=new_ticker,
+                                        price=price_data['price'],
+                                        change=price_data['change_percent'],
+                                        volume=price_data['volume'],
+                                        additional_info='',
+                                        analysis_date=date.today()
+                                    )
+                                    
+                                    # Сохранение источника цены
+                                    db.save_price_source(stock_id, price_data['source'])
+                                    
+                                    # Автоматическое сохранение в companies.json (v3.0)
+                                    if save_company_to_json(new_ticker, info):
+                                        st.success(f"✅ Компания {new_ticker} добавлена и сохранена в config/companies.json!")
+                                    else:
+                                        st.success(f"✅ Компания {new_ticker} добавлена в БД!")
+                                        st.warning("⚠️ Не удалось сохранить в companies.json")
+                                    
                                     st.info(f"📝 Название: {info.get('name', 'Неизвестно')}")
                                     st.info(f"🏭 Сектор: {info.get('sector', 'Неизвестно')}")
+                                    st.info(f"💰 Цена: ${price_data['price']:.2f} ({price_data['change_percent']:+.2f}%)")
                                     st.rerun()
                                     
                                 except Exception as e:
@@ -344,7 +494,18 @@ def show(config: dict):
         st.markdown("---")
         
         # Список компаний с возможностью удаления
-        st.markdown("#### 📋 Список компаний")
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            st.markdown("#### 📋 Список компаний")
+        
+        with col2:
+            # Кнопка экспорта в JSON (v3.0)
+            if st.button("📥 Экспорт в JSON", use_container_width=True, help="Экспортировать все компании в config/companies.json"):
+                if export_companies_to_json(db):
+                    st.success(f"✅ Экспортировано {len(companies)} компаний в config/companies.json")
+                else:
+                    st.error("❌ Ошибка экспорта")
         
         if companies:
             # Поиск
@@ -421,6 +582,9 @@ def show(config: dict):
                                 # Удаляем саму компанию
                                 db.cursor.execute("DELETE FROM companies WHERE id = ?", (company['id'],))
                                 db.conn.commit()
+                                
+                                # Автоматическое удаление из companies.json (v3.0)
+                                remove_company_from_json(company['ticker'])
                                 
                                 st.success(f"✅ Компания {company['ticker']} и все связанные данные ({stock_count} записей) удалены!")
                                 st.rerun()
@@ -553,7 +717,7 @@ def run_analysis(config: dict, selected_models: list, max_retries: int):
         
         # Загрузка данных
         status_text.text("📂 Загрузка данных...")
-        stocks = load_stock_data("Stock quotes.xlsx", database=db)
+        stocks = load_stock_data("data/samples/Stock quotes.xlsx", database=db)
         progress_bar.progress(10)
         
         # Фильтрация моделей

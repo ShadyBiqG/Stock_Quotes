@@ -123,6 +123,17 @@ class Database:
             )
         """)
         
+        # Таблица источников цен (v3.0)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS price_sources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stock_id INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (stock_id) REFERENCES stocks(id)
+            )
+        """)
+        
         # Создание индексов
         self.cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_stocks_date 
@@ -272,6 +283,25 @@ class Database:
         
         self.conn.commit()
         return stock_id
+    
+    def save_price_source(self, stock_id: int, source: str) -> int:
+        """
+        Сохранить источник цены (v3.0)
+        
+        Args:
+            stock_id: ID котировки
+            source: Источник ('yahoo_finance', 'manual', 'default')
+            
+        Returns:
+            ID записи источника
+        """
+        self.cursor.execute("""
+            INSERT INTO price_sources (stock_id, source)
+            VALUES (?, ?)
+        """, (stock_id, source))
+        
+        self.conn.commit()
+        return self.cursor.lastrowid
     
     def save_analysis(self, stock_id: int, model_name: str, model_id: str,
                       prediction: str, reasons: List[str], confidence: str,

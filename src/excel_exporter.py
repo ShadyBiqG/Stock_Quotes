@@ -209,11 +209,14 @@ class ExcelExporter:
             # Средняя уверенность
             confidences = [r['confidence'] for r in stock_results]
             conf_map = {'ВЫСОКАЯ': 3, 'СРЕДНЯЯ': 2, 'НИЗКАЯ': 1}
-            avg_conf = sum(conf_map.get(c, 1) for c in confidences) / len(confidences)
             
-            avg_conf_text = 'ВЫСОКАЯ' if avg_conf >= 2.5 else (
-                'СРЕДНЯЯ' if avg_conf >= 1.5 else 'НИЗКАЯ'
-            )
+            if confidences:
+                avg_conf = sum(conf_map.get(c, 1) for c in confidences) / len(confidences)
+                avg_conf_text = 'ВЫСОКАЯ' if avg_conf >= 2.5 else (
+                    'СРЕДНЯЯ' if avg_conf >= 1.5 else 'НИЗКАЯ'
+                )
+            else:
+                avg_conf_text = 'Н/Д'
             
             quality_data.append({
                 'Тикер': ticker,
@@ -224,16 +227,37 @@ class ExcelExporter:
                 'Всего токенов': sum(r.get('tokens_used', 0) for r in stock_results)
             })
         
+        # Проверка наличия данных
+        if not quality_data:
+            # Если нет данных, создаем пустой лист с сообщением
+            df = pd.DataFrame([{
+                'Тикер': 'Нет данных',
+                'Консенсус': '-',
+                'Разных мнений': '-',
+                'Подозрительных': '-',
+                'Средняя уверенность': '-',
+                'Всего токенов': '-'
+            }])
+            df.to_excel(writer, sheet_name='Анализ качества', index=False)
+            logger.warning("Нет данных для анализа качества")
+            return
+        
         df = pd.DataFrame(quality_data)
         
-        # Итоговая статистика
+        # Итоговая статистика (только если есть данные)
+        total_consensus = sum(1 for d in quality_data if d['Консенсус'] == 'Да')
+        total_count = len(quality_data)
+        avg_opinions = sum(d['Разных мнений'] for d in quality_data) / total_count
+        total_suspicious = sum(d['Подозрительных'] for d in quality_data)
+        total_tokens = sum(d['Всего токенов'] for d in quality_data)
+        
         total_stats = pd.DataFrame([{
             'Тикер': 'ИТОГО',
-            'Консенсус': f"{sum(1 for d in quality_data if d['Консенсус'] == 'Да')} / {len(quality_data)}",
-            'Разных мнений': f"{sum(d['Разных мнений'] for d in quality_data) / len(quality_data):.1f}",
-            'Подозрительных': sum(d['Подозрительных'] for d in quality_data),
+            'Консенсус': f"{total_consensus} / {total_count}",
+            'Разных мнений': f"{avg_opinions:.1f}",
+            'Подозрительных': total_suspicious,
             'Средняя уверенность': '-',
-            'Всего токенов': sum(d['Всего токенов'] for d in quality_data)
+            'Всего токенов': total_tokens
         }])
         
         df = pd.concat([df, total_stats], ignore_index=True)

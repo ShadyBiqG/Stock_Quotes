@@ -74,12 +74,13 @@ echo [5/5] Проверка конфигурации и структуры пр�
 
 REM Проверка структуры папок
 if not exist "src\" mkdir src
+if not exist "src\dashboards\" mkdir src\dashboards
 if not exist "data\" mkdir data
 if not exist "data\cache\" mkdir data\cache
 if not exist "output\" mkdir output
 if not exist "output\exports\" mkdir output\exports
 if not exist "logs\" mkdir logs
-if not exist "dashboards\" mkdir dashboards
+if not exist "config\" mkdir config
 echo ✅ Структура папок создана
 
 REM Проверка файлов
@@ -131,13 +132,13 @@ if not exist "app.py" (
     pause
     exit /b 1
 )
-if not exist "dashboards\overview.py" (
-    echo ❌ Дашборд dashboards\overview.py не найден!
+if not exist "src\dashboards\overview.py" (
+    echo ❌ Дашборд src\dashboards\overview.py не найден!
     pause
     exit /b 1
 )
-if not exist "dashboards\settings.py" (
-    echo ❌ Дашборд dashboards\settings.py не найден!
+if not exist "src\dashboards\settings.py" (
+    echo ❌ Дашборд src\dashboards\settings.py не найден!
     pause
     exit /b 1
 )

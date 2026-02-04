@@ -40,10 +40,55 @@ echo [3/6] 📁 Проверка структуры проекта...
 
 set MISSING_FILES=0
 
-if not exist "config.yaml" (
-    echo ❌ config.yaml не найден
-    set MISSING_FILES=1
+REM v3.0: Проверка новой структуры конфигурации
+if exist "config\api_keys.yaml" (
+    if exist "config\llm_config.yaml" (
+        echo ✅ Конфигурация v3.0 найдена
+        goto :config_ok
+    )
 )
+
+REM Проверка старой структуры
+if exist "config.yaml" (
+    echo ⚠️  Найден старый config.yaml
+    echo.
+    echo 💡 Рекомендуется миграция на v3.0
+    echo    Запустите: python scripts\migrate_to_v3.py
+    echo.
+    set /p MIGRATE="Запустить миграцию сейчас? [y/N]: "
+    if /i "%MIGRATE%"=="y" (
+        echo.
+        echo Запуск миграции...
+        python scripts\migrate_to_v3.py
+        if errorlevel 1 (
+            echo.
+            echo ❌ Ошибка миграции
+            pause
+            exit /b 1
+        )
+        echo.
+        echo ✅ Миграция завершена
+        echo.
+    )
+    goto :config_ok
+)
+
+REM Конфигурация не найдена
+echo ❌ Конфигурация не найдена!
+echo.
+echo v3.0: Создайте файлы:
+echo   - config\api_keys.yaml
+echo   - config\llm_config.yaml
+echo   - config\companies.json
+echo.
+echo Или скопируйте примеры:
+echo   copy config\api_keys.example.yaml config\api_keys.yaml
+echo   copy config\llm_config.example.yaml config\llm_config.yaml
+echo   copy config\companies.example.json config\companies.json
+echo.
+set MISSING_FILES=1
+
+:config_ok
 
 if not exist "app.py" (
     echo ❌ app.py не найден
@@ -75,13 +120,13 @@ if not exist "src\analyzer.py" (
     set MISSING_FILES=1
 )
 
-if not exist "dashboards\overview.py" (
-    echo ❌ dashboards\overview.py не найден
+if not exist "src\dashboards\overview.py" (
+    echo ❌ src\dashboards\overview.py не найден
     set MISSING_FILES=1
 )
 
-if not exist "dashboards\settings.py" (
-    echo ❌ dashboards\settings.py не найден
+if not exist "src\dashboards\settings.py" (
+    echo ❌ src\dashboards\settings.py не найден
     set MISSING_FILES=1
 )
 

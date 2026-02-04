@@ -95,10 +95,14 @@ def show(config: dict):
     # Консенсус прогнозов
     for ticker, data in stocks_data.items():
         predictions = data['predictions']
-        # Большинство голосов
-        most_common = max(set(predictions), key=predictions.count)
-        data['consensus'] = most_common
-        data['agreement'] = predictions.count(most_common) / len(predictions) * 100
+        if predictions:
+            # Большинство голосов
+            most_common = max(set(predictions), key=predictions.count)
+            data['consensus'] = most_common
+            data['agreement'] = predictions.count(most_common) / len(predictions) * 100
+        else:
+            data['consensus'] = 'Н/Д'
+            data['agreement'] = 0
     
     # Метрики
     st.markdown("### 📊 Ключевые метрики")
@@ -113,11 +117,12 @@ def show(config: dict):
         )
     
     growing = sum(1 for s in stocks_data.values() if s['consensus'] == 'РАСТЕТ')
+    total_stocks = len(stocks_data)
     with col2:
         st.metric(
             "Растут",
             growing,
-            delta=f"{growing/len(stocks_data)*100:.0f}%"
+            delta=f"{growing/total_stocks*100:.0f}%" if total_stocks > 0 else "0%"
         )
     
     falling = sum(1 for s in stocks_data.values() if s['consensus'] == 'ПАДАЕТ')
@@ -125,11 +130,11 @@ def show(config: dict):
         st.metric(
             "Падают",
             falling,
-            delta=f"-{falling/len(stocks_data)*100:.0f}%",
+            delta=f"-{falling/total_stocks*100:.0f}%" if total_stocks > 0 else "0%",
             delta_color="inverse"
         )
     
-    avg_agreement = sum(s['agreement'] for s in stocks_data.values()) / len(stocks_data)
+    avg_agreement = sum(s['agreement'] for s in stocks_data.values()) / total_stocks if total_stocks > 0 else 0
     with col4:
         st.metric(
             "Консенсус",
@@ -172,12 +177,14 @@ def show(config: dict):
     with col2:
         st.markdown("#### Статистика")
         st.markdown(f"**Дата:** {selected_date}")
-        st.markdown(f"**Моделей:** {len(results) // len(stocks_data)}")
+        models_count = len(results) // len(stocks_data) if len(stocks_data) > 0 else 0
+        st.markdown(f"**Моделей:** {models_count}")
         st.markdown(f"**Всего анализов:** {len(results)}")
         
         # Средние значения
-        avg_price = sum(s['price'] for s in stocks_data.values()) / len(stocks_data)
-        avg_change = sum(s['change'] for s in stocks_data.values()) / len(stocks_data)
+        total_stocks = len(stocks_data)
+        avg_price = sum(s['price'] for s in stocks_data.values()) / total_stocks if total_stocks > 0 else 0
+        avg_change = sum(s['change'] for s in stocks_data.values()) / total_stocks if total_stocks > 0 else 0
         
         st.markdown(f"**Ср. цена:** ${avg_price:.2f}")
         st.markdown(f"**Ср. изм.:** {avg_change:+.2f}%")
@@ -318,22 +325,6 @@ def _run_analysis(config: dict):
         status_text = st.empty()
         
         try:
-            # Проверка файла
-            excel_file = "Stock quotes.xlsx"
-            if not os.path.exists(excel_file):
-                st.error(f"❌ Файл {excel_file} не найден!")
-                return
-            
-            # Загрузка данных
-            status_text.text("📂 Загрузка данных...")
-            loader = DataLoader(excel_file)
-            stocks = loader.load()
-            progress_bar.progress(10)
-            
-            if not stocks:
-                st.error("❌ Не удалось загрузить данные из Excel!")
-                return
-            
             # Инициализация компонентов
             status_text.text("🔧 Инициализация компонентов...")
             
@@ -341,10 +332,31 @@ def _run_analysis(config: dict):
                 api_key=config['openrouter']['api_key'],
                 base_url=config['openrouter']['base_url']
             )
-            progress_bar.progress(20)
+            progress_bar.progress(10)
             
             db = Database(config['database']['path'])
+            progress_bar.progress(20)
+            
+            # Price Fetcher (v3.0)
+            from src.price_fetcher import YahooFinanceFetcher
+            price_fetcher = YahooFinanceFetcher()
+            progress_bar.progress(25)
+            
+            # Проверка файла (v3.0: используем путь из конфигурации)
+            excel_file = config.get('input', {}).get('excel_file', 'data/samples/Stock quotes.xlsx')
+            if not os.path.exists(excel_file):
+                st.error(f"❌ Файл {excel_file} не найден!")
+                return
+            
+            # Загрузка данных (v3.0: с database, price_fetcher и config)
+            status_text.text("📂 Загрузка данных...")
+            loader = DataLoader(excel_file, database=db, price_fetcher=price_fetcher, config=config)
+            stocks = loader.load()
             progress_bar.progress(30)
+            
+            if not stocks:
+                st.error("❌ Не удалось загрузить данные из файла!")
+                return
             
             alphavantage_key = config['company_info'].get('alphavantage_api_key', '')
             company_provider = CompanyInfoProvider(

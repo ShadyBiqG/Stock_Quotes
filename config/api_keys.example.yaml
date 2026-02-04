@@ -1,0 +1,8 @@
+# OpenRouter API ключ
+# Получить на https://openrouter.ai/
+openrouter_api_key: "sk-or-v1-your-key-here"
+
+# Alphavantage API ключ (опционально)
+# Получить на https://www.alphavantage.co/support/#api-key
+# Бесплатный план: 5 запросов в минуту, 500 запросов в день
+alphavantage_api_key: ""
