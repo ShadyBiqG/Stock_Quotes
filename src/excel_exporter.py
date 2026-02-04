@@ -6,6 +6,8 @@ import logging
 from typing import List, Dict
 from datetime import date
 from pathlib import Path
+import os
+import tempfile
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -61,23 +63,91 @@ class ExcelExporter:
         filepath = self.output_dir / filename
         
         logger.info(f"Экспорт результатов в {filepath}")
-        
-        # Создание Excel файла
-        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
-            # Лист "Сводка"
-            self._create_summary_sheet(results, writer)
-            
-            # Лист "Детали"
-            self._create_details_sheet(results, writer)
-            
-            # Лист "Анализ качества"
-            self._create_quality_sheet(results, writer)
-        
-        # Применение форматирования
-        self._apply_formatting(filepath)
-        
-        logger.info(f"Файл создан: {filepath}")
-        return filepath
+
+        return self._export_with_safe_replace(filepath, results)
+
+    def _export_with_safe_replace(self, target_path: Path, results: List[Dict]) -> Path:
+        """
+        Экспорт в Excel с защитой от блокировки файла на Windows.
+        Пишем во временный файл и затем заменяем целевой. Если целевой файл открыт,
+        подбираем новое имя вида *_1.xlsx, *_2.xlsx.
+
+        Args:
+            target_path: Желаемый путь итогового файла
+            results: Результаты анализа
+
+        Returns:
+            Фактический путь созданного файла
+        """
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        attempts = 10
+        last_error = None
+
+        for i in range(attempts):
+            final_path = target_path if i == 0 else self._with_suffix_counter(target_path, i)
+
+            tmp_path = None
+            try:
+                fd, tmp_name = tempfile.mkstemp(
+                    suffix=final_path.suffix,
+                    prefix=f".tmp_{final_path.stem}_",
+                    dir=str(final_path.parent)
+                )
+                os.close(fd)
+                tmp_path = Path(tmp_name)
+
+                # Создание Excel файла во временный путь
+                with pd.ExcelWriter(tmp_path, engine='openpyxl') as writer:
+                    self._create_summary_sheet(results, writer)
+                    self._create_details_sheet(results, writer)
+                    self._create_quality_sheet(results, writer)
+
+                # Применение форматирования
+                self._apply_formatting(tmp_path)
+
+                # Атомарная замена (или создание, если файла нет)
+                os.replace(tmp_path, final_path)
+
+                logger.info(f"Файл создан: {final_path}")
+                return final_path
+
+            except PermissionError as e:
+                last_error = e
+                logger.warning(f"Нет доступа к файлу {final_path} (возможно открыт в Excel). Попытка {i + 1}/{attempts}")
+
+                if tmp_path and tmp_path.exists():
+                    try:
+                        tmp_path.unlink()
+                    except OSError:
+                        pass
+
+                continue
+
+            except Exception:
+                if tmp_path and tmp_path.exists():
+                    try:
+                        tmp_path.unlink()
+                    except OSError:
+                        pass
+                raise
+
+        raise PermissionError(
+            f"Не удалось сохранить Excel файл. Проверьте, что файл не открыт и доступна запись: {target_path}"
+        ) from last_error
+
+    def _with_suffix_counter(self, path: Path, counter: int) -> Path:
+        """
+        Построить путь с числовым суффиксом: file.xlsx -> file_1.xlsx
+
+        Args:
+            path: Исходный путь
+            counter: Номер суффикса
+
+        Returns:
+            Новый путь
+        """
+        return path.with_name(f"{path.stem}_{counter}{path.suffix}")
     
     def _create_summary_sheet(self, results: List[Dict], writer) -> None:
         """

@@ -436,6 +436,7 @@ def _export_to_excel(config: dict):
     Args:
         config: Конфигурация приложения
     """
+    db = None
     try:
         db = Database(config['database']['path'])
         
@@ -463,9 +464,8 @@ def _export_to_excel(config: dict):
                     use_container_width=True
                 )
         
-        db.close()
-        
     except Exception as e:
         st.error(f"❌ Ошибка при экспорте: {e}")
-    
-    db.close()
+    finally:
+        if db is not None:
+            db.close()
