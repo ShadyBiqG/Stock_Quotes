@@ -1,0 +1,40 @@
+# API ключи и конфигурация (КРИТИЧНО!)
+config.yaml
+.env
+*.env
+
+# Но сохраняем пример конфигурации
+!config.example.yaml
+
+# База данных
+data/*.db
+data/*.db-*
+
+# Кэш
+data/cache/*
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Виртуальное окружение
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Логи
+logs/*.log
+
+# Экспорты (можно коммитить примеры)
+output/exports/*.xlsx
+
+# Временные файлы
+*.tmp
+.DS_Store
+Thumbs.db

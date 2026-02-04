@@ -1,0 +1,23 @@
+# Работа с данными
+pandas>=2.0.0
+openpyxl>=3.1.0
+pyyaml>=6.0
+python-dateutil>=2.8.0
+
+# OpenRouter API
+openai>=1.0.0
+aiohttp>=3.9.0
+
+# Получение информации о компаниях (не требуется - используем requests)
+
+# Планировщик задач
+APScheduler>=3.10.0
+
+# Веб-приложение и дашборды
+streamlit>=1.30.0
+plotly>=5.18.0
+
+# Утилиты
+tqdm>=4.66.0
+requests>=2.31.0
+nest-asyncio>=1.5.0

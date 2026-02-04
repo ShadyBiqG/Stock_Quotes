@@ -1,0 +1,407 @@
+"""
+Экспорт результатов анализа в Excel с форматированием
+"""
+
+import logging
+from typing import List, Dict
+from datetime import date
+from pathlib import Path
+import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+logger = logging.getLogger(__name__)
+
+
+class ExcelExporter:
+    """Класс для экспорта результатов в Excel"""
+    
+    # Цветовая схема
+    COLORS = {
+        'РАСТЕТ': 'C6EFCE',      # Зеленый
+        'ПАДАЕТ': 'FFC7CE',      # Красный
+        'СТАБИЛЬНА': 'FFEB9C',   # Желтый
+        'ОШИБКА': 'FFC7CE',      # Красный
+        'ПОДОЗРИТЕЛЬНО': 'FFD9B3', # Оранжевый
+        'HEADER': '4472C4'       # Синий
+    }
+    
+    def __init__(self, output_dir: str = "output/exports"):
+        """
+        Инициализация экспортера
+        
+        Args:
+            output_dir: Директория для сохранения файлов
+        """
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Экспортер инициализирован: {self.output_dir}")
+    
+    def export(self, results: List[Dict], 
+               analysis_date: date = None,
+               filename: str = None) -> Path:
+        """
+        Экспорт результатов в Excel
+        
+        Args:
+            results: Результаты анализа
+            analysis_date: Дата анализа
+            filename: Имя файла (если None - генерируется автоматически)
+            
+        Returns:
+            Путь к созданному файлу
+        """
+        if analysis_date is None:
+            analysis_date = date.today()
+        
+        if filename is None:
+            filename = f"{analysis_date}_analysis.xlsx"
+        
+        filepath = self.output_dir / filename
+        
+        logger.info(f"Экспорт результатов в {filepath}")
+        
+        # Создание Excel файла
+        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+            # Лист "Сводка"
+            self._create_summary_sheet(results, writer)
+            
+            # Лист "Детали"
+            self._create_details_sheet(results, writer)
+            
+            # Лист "Анализ качества"
+            self._create_quality_sheet(results, writer)
+        
+        # Применение форматирования
+        self._apply_formatting(filepath)
+        
+        logger.info(f"Файл создан: {filepath}")
+        return filepath
+    
+    def _create_summary_sheet(self, results: List[Dict], writer) -> None:
+        """
+        Создать лист "Сводка"
+        
+        Args:
+            results: Результаты анализа
+            writer: Excel writer
+        """
+        # Группировка по тикерам
+        summary_data = {}
+        
+        for r in results:
+            ticker = r['ticker']
+            
+            if ticker not in summary_data:
+                summary_data[ticker] = {
+                    'Тикер': ticker,
+                    'Компания': r.get('name', ''),
+                    'Описание': r.get('description', ''),
+                    'Сектор': r.get('sector', ''),
+                    'Цена': r['price'],
+                    'Изм.%': r['change'],
+                    'Объем': r['volume']
+                }
+            
+            # Прогнозы моделей
+            model_name = r['model_name']
+            summary_data[ticker][model_name] = r['prediction']
+        
+        # Создание DataFrame
+        df = pd.DataFrame(list(summary_data.values()))
+        
+        # Вычисление консенсуса
+        model_columns = [col for col in df.columns if col not in [
+            'Тикер', 'Компания', 'Описание', 'Сектор', 'Цена', 'Изм.%', 'Объем'
+        ]]
+        
+        def calculate_consensus(row):
+            predictions = [row[col] for col in model_columns if pd.notna(row[col])]
+            if not predictions:
+                return 'Н/Д'
+            
+            # Если все согласны
+            if len(set(predictions)) == 1:
+                return predictions[0]
+            
+            # Большинство
+            from collections import Counter
+            counts = Counter(predictions)
+            most_common = counts.most_common(1)[0]
+            
+            if most_common[1] > len(predictions) / 2:
+                return f"{most_common[0]} ({most_common[1]}/{len(predictions)})"
+            
+            return f"Разногласие ({most_common[1]}/{len(predictions)})"
+        
+        df['Консенсус'] = df.apply(calculate_consensus, axis=1)
+        
+        # Сохранение в Excel
+        df.to_excel(writer, sheet_name='Сводка', index=False)
+        
+        logger.debug("Создан лист 'Сводка'")
+    
+    def _create_details_sheet(self, results: List[Dict], writer) -> None:
+        """
+        Создать лист "Детали"
+        
+        Args:
+            results: Результаты анализа
+            writer: Excel writer
+        """
+        details_data = []
+        
+        for r in results:
+            # Причины в виде текста
+            reasons_text = '\n'.join([
+                f"{i+1}. {reason}" 
+                for i, reason in enumerate(r.get('reasons', []))
+            ])
+            
+            details_data.append({
+                'Тикер': r['ticker'],
+                'Компания': r.get('name', ''),
+                'Цена': r['price'],
+                'Изм.%': r['change'],
+                'Модель': r['model_name'],
+                'Прогноз': r['prediction'],
+                'Причины': reasons_text,
+                'Уверенность': r['confidence'],
+                'Токенов': r.get('tokens_used', 0)
+            })
+        
+        df = pd.DataFrame(details_data)
+        df.to_excel(writer, sheet_name='Детали', index=False)
+        
+        logger.debug("Создан лист 'Детали'")
+    
+    def _create_quality_sheet(self, results: List[Dict], writer) -> None:
+        """
+        Создать лист "Анализ качества"
+        
+        Args:
+            results: Результаты анализа
+            writer: Excel writer
+        """
+        # Группировка по тикерам
+        stocks = {}
+        for r in results:
+            ticker = r['ticker']
+            if ticker not in stocks:
+                stocks[ticker] = []
+            stocks[ticker].append(r)
+        
+        quality_data = []
+        
+        for ticker, stock_results in stocks.items():
+            predictions = [r['prediction'] for r in stock_results]
+            
+            # Консенсус
+            has_consensus = len(set(predictions)) == 1
+            
+            # Подозрительные ответы
+            suspicious_count = sum(
+                1 for r in stock_results
+                if r.get('validation_flags', {}).get('trust_level') == 'LOW'
+            )
+            
+            # Средняя уверенность
+            confidences = [r['confidence'] for r in stock_results]
+            conf_map = {'ВЫСОКАЯ': 3, 'СРЕДНЯЯ': 2, 'НИЗКАЯ': 1}
+            avg_conf = sum(conf_map.get(c, 1) for c in confidences) / len(confidences)
+            
+            avg_conf_text = 'ВЫСОКАЯ' if avg_conf >= 2.5 else (
+                'СРЕДНЯЯ' if avg_conf >= 1.5 else 'НИЗКАЯ'
+            )
+            
+            quality_data.append({
+                'Тикер': ticker,
+                'Консенсус': 'Да' if has_consensus else 'Нет',
+                'Разных мнений': len(set(predictions)),
+                'Подозрительных': suspicious_count,
+                'Средняя уверенность': avg_conf_text,
+                'Всего токенов': sum(r.get('tokens_used', 0) for r in stock_results)
+            })
+        
+        df = pd.DataFrame(quality_data)
+        
+        # Итоговая статистика
+        total_stats = pd.DataFrame([{
+            'Тикер': 'ИТОГО',
+            'Консенсус': f"{sum(1 for d in quality_data if d['Консенсус'] == 'Да')} / {len(quality_data)}",
+            'Разных мнений': f"{sum(d['Разных мнений'] for d in quality_data) / len(quality_data):.1f}",
+            'Подозрительных': sum(d['Подозрительных'] for d in quality_data),
+            'Средняя уверенность': '-',
+            'Всего токенов': sum(d['Всего токенов'] for d in quality_data)
+        }])
+        
+        df = pd.concat([df, total_stats], ignore_index=True)
+        df.to_excel(writer, sheet_name='Анализ качества', index=False)
+        
+        logger.debug("Создан лист 'Анализ качества'")
+    
+    def _apply_formatting(self, filepath: Path) -> None:
+        """
+        Применить форматирование к Excel файлу
+        
+        Args:
+            filepath: Путь к файлу
+        """
+        wb = load_workbook(filepath)
+        
+        # Форматирование листа "Сводка"
+        if 'Сводка' in wb.sheetnames:
+            self._format_summary_sheet(wb['Сводка'])
+        
+        # Форматирование листа "Детали"
+        if 'Детали' in wb.sheetnames:
+            self._format_details_sheet(wb['Детали'])
+        
+        # Форматирование листа "Анализ качества"
+        if 'Анализ качества' in wb.sheetnames:
+            self._format_quality_sheet(wb['Анализ качества'])
+        
+        wb.save(filepath)
+        logger.debug("Применено форматирование")
+    
+    def _format_summary_sheet(self, ws) -> None:
+        """Форматирование листа Сводка"""
+        # Заголовки
+        header_fill = PatternFill(start_color=self.COLORS['HEADER'], 
+                                  end_color=self.COLORS['HEADER'],
+                                  fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Цветовое кодирование прогнозов
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                if cell.value in self.COLORS:
+                    cell.fill = PatternFill(
+                        start_color=self.COLORS[cell.value],
+                        end_color=self.COLORS[cell.value],
+                        fill_type='solid'
+                    )
+                
+                # Выравнивание
+                if cell.column <= 4:  # Текстовые колонки
+                    cell.alignment = Alignment(horizontal='left', 
+                                              vertical='top',
+                                              wrap_text=True)
+                else:
+                    cell.alignment = Alignment(horizontal='center',
+                                              vertical='center')
+        
+        # Автоширина колонок
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Фиксация заголовка
+        ws.freeze_panes = 'A2'
+    
+    def _format_details_sheet(self, ws) -> None:
+        """Форматирование листа Детали"""
+        # Заголовки
+        header_fill = PatternFill(start_color=self.COLORS['HEADER'],
+                                  end_color=self.COLORS['HEADER'],
+                                  fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        # Перенос текста в причинах
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                if cell.column == 7:  # Колонка "Причины"
+                    cell.alignment = Alignment(wrap_text=True,
+                                              vertical='top')
+                    ws.row_dimensions[cell.row].height = 60
+        
+        # Автоширина
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            
+            for cell in column:
+                try:
+                    if cell.value and cell.column != 7:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            
+            if column[0].column == 7:  # Причины - широкая колонка
+                ws.column_dimensions[column_letter].width = 60
+            else:
+                adjusted_width = min(max_length + 2, 30)
+                ws.column_dimensions[column_letter].width = adjusted_width
+    
+    def _format_quality_sheet(self, ws) -> None:
+        """Форматирование листа Анализ качества"""
+        # Заголовки
+        header_fill = PatternFill(start_color=self.COLORS['HEADER'],
+                                  end_color=self.COLORS['HEADER'],
+                                  fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+        
+        # Выделение итоговой строки
+        last_row = ws.max_row
+        for cell in ws[last_row]:
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color='E7E6E6',
+                                   end_color='E7E6E6',
+                                   fill_type='solid')
+        
+        # Автоширина
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            
+            adjusted_width = min(max_length + 2, 30)
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+
+# Пример использования
+if __name__ == "__main__":
+    from .database import Database
+    
+    logging.basicConfig(level=logging.INFO)
+    
+    # Получение результатов из БД
+    with Database() as db:
+        results = db.get_analysis_results()
+    
+    # Экспорт
+    exporter = ExcelExporter()
+    filepath = exporter.export(results)
+    
+    print(f"✅ Файл создан: {filepath}")
