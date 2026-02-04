@@ -153,11 +153,23 @@ class ExcelExporter:
         details_data = []
         
         for r in results:
-            # Причины в виде текста
-            reasons_text = '\n'.join([
-                f"{i+1}. {reason}" 
-                for i, reason in enumerate(r.get('reasons', []))
-            ])
+            # Полный текст анализа
+            analysis_text = r.get('analysis_text', '')
+            
+            # Ключевые факторы
+            key_factors = r.get('key_factors', [])
+            if key_factors:
+                factors_text = '\n'.join([
+                    f"{i+1}. {factor}" 
+                    for i, factor in enumerate(key_factors)
+                ])
+            else:
+                # Fallback на старое поле reasons для обратной совместимости
+                reasons = r.get('reasons', [])
+                factors_text = '\n'.join([
+                    f"{i+1}. {reason}" 
+                    for i, reason in enumerate(reasons)
+                ]) if reasons else 'Не указаны'
             
             details_data.append({
                 'Тикер': r['ticker'],
@@ -166,7 +178,8 @@ class ExcelExporter:
                 'Изм.%': r['change'],
                 'Модель': r['model_name'],
                 'Прогноз': r['prediction'],
-                'Причины': reasons_text,
+                'Анализ': analysis_text if analysis_text else 'Не предоставлен',
+                'Ключевые факторы': factors_text,
                 'Уверенность': r['confidence'],
                 'Токенов': r.get('tokens_used', 0)
             })
@@ -350,32 +363,58 @@ class ExcelExporter:
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
         
-        # Перенос текста в причинах
+        # Найти индексы колонок для текстовых полей
+        header_row = [cell.value for cell in ws[1]]
+        analysis_col = header_row.index('Анализ') + 1 if 'Анализ' in header_row else None
+        factors_col = header_row.index('Ключевые факторы') + 1 if 'Ключевые факторы' in header_row else None
+        
+        # Перенос текста в анализе и факторах
         for row in ws.iter_rows(min_row=2):
             for cell in row:
-                if cell.column == 7:  # Колонка "Причины"
+                # Колонка "Анализ"
+                if analysis_col and cell.column == analysis_col:
                     cell.alignment = Alignment(wrap_text=True,
-                                              vertical='top')
-                    ws.row_dimensions[cell.row].height = 60
+                                              vertical='top',
+                                              horizontal='left')
+                    ws.row_dimensions[cell.row].height = 80
+                
+                # Колонка "Ключевые факторы"
+                elif factors_col and cell.column == factors_col:
+                    cell.alignment = Alignment(wrap_text=True,
+                                              vertical='top',
+                                              horizontal='left')
+                    ws.row_dimensions[cell.row].height = 80
+                
+                # Остальные колонки
+                else:
+                    cell.alignment = Alignment(vertical='center',
+                                              horizontal='center')
         
-        # Автоширина
-        for column in ws.columns:
-            max_length = 0
-            column_letter = get_column_letter(column[0].column)
+        # Установка ширины колонок
+        for i, column in enumerate(ws.columns, 1):
+            column_letter = get_column_letter(i)
             
-            for cell in column:
-                try:
-                    if cell.value and cell.column != 7:
-                        max_length = max(max_length, len(str(cell.value)))
-                except:
-                    pass
-            
-            if column[0].column == 7:  # Причины - широкая колонка
-                ws.column_dimensions[column_letter].width = 60
+            # Широкие колонки для текстовых полей
+            if i == analysis_col:
+                ws.column_dimensions[column_letter].width = 70
+            elif i == factors_col:
+                ws.column_dimensions[column_letter].width = 50
             else:
-                adjusted_width = min(max_length + 2, 30)
+                # Автоширина для остальных колонок
+                max_length = 0
+                for cell in column:
+                    try:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 25)
                 ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Фиксация заголовка
+        ws.freeze_panes = 'A2'
     
     def _format_quality_sheet(self, ws) -> None:
         """Форматирование листа Анализ качества"""
