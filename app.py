@@ -100,7 +100,7 @@ with st.sidebar.expander("ℹ️ О приложении"):
     """)
 
 # Импорт дашбордов
-from dashboards import overview, analysis, history, accuracy, settings
+from src.dashboards import overview, analysis, history, accuracy, settings
 
 # Маршрутизация страниц
 if page == "🏠 Обзор":

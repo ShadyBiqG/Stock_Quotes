@@ -2,6 +2,9 @@
 chcp 65001 > nul
 title Очистка базы данных Stock Quotes
 
+REM Переход в корневую директорию проекта
+cd /d "%~dp0\.."
+
 echo.
 echo ═══════════════════════════════════════════════════════════════
 echo   🗑️  ОЧИСТКА БАЗЫ ДАННЫХ STOCK QUOTES
@@ -21,7 +24,7 @@ if errorlevel 1 (
 REM Показать информацию о БД
 echo 📊 Текущее состояние базы данных:
 echo.
-python clear_database.py --info
+python scripts\clear_database.py --info
 
 echo.
 echo.
@@ -60,19 +63,19 @@ goto EXIT
 :CLEAR_TABLES
 echo.
 echo ═══════════════════════════════════════════════════════════════
-python clear_database.py --clear
+python scripts\clear_database.py --clear
 goto END
 
 :DELETE_FILE
 echo.
 echo ═══════════════════════════════════════════════════════════════
-python clear_database.py --delete
+python scripts\clear_database.py --delete
 goto END
 
 :SHOW_INFO
 echo.
 echo ═══════════════════════════════════════════════════════════════
-python clear_database.py --info
+python scripts\clear_database.py --info
 goto END
 
 :END

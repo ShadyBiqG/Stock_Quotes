@@ -19,9 +19,9 @@
 
 **Рекомендуемый способ:**
 
-1. Запустите `setup.bat` - автоматически проверит и установит все зависимости
+1. Запустите `bin\setup.bat` - автоматически проверит и установит все зависимости
 2. Настройте API ключ в `config.yaml`
-3. Запустите `start_web.bat` для веб-интерфейса
+3. Запустите `bin\start_web.bat` для веб-интерфейса
 
 ### Ручная установка
 
@@ -67,7 +67,7 @@ openrouter:
 **Через веб-интерфейс (рекомендуется):**
 ```bash
 # Windows
-start_web.bat
+bin\start_web.bat
 
 # Linux/Mac
 streamlit run app.py
@@ -78,7 +78,7 @@ streamlit run app.py
 **Через CLI:**
 ```bash
 # Windows
-start.bat
+bin\start.bat
 
 # Linux/Mac
 python main.py
@@ -88,20 +88,62 @@ python main.py
 
 ```
 Stock_Quotes/
-├── config.yaml              # Конфигурация
-├── main.py                  # CLI скрипт
-├── app.py                   # Веб-приложение
-├── scheduler.py             # Планировщик
-├── src/                     # Модули
-│   ├── data_loader.py       # Чтение Excel
-│   ├── llm_manager.py       # OpenRouter клиент
-│   ├── analyzer.py          # Логика анализа
-│   ├── database.py          # SQLite база
-│   ├── excel_exporter.py    # Экспорт результатов
-│   └── company_info.py      # Информация о компаниях
-├── dashboards/              # Страницы веб-приложения
-├── data/                    # База данных
-└── output/exports/          # Excel отчеты
+├── bin/                        # Скрипты запуска (.bat файлы)
+│   ├── setup.bat               # Установка зависимостей
+│   ├── start.bat               # Запуск CLI
+│   ├── start_web.bat           # Запуск веб-интерфейса
+│   ├── start_scheduler.bat     # Запуск планировщика
+│   ├── quick_start.bat         # Быстрый старт
+│   └── clear_database.bat      # Очистка БД
+├── docs/                       # Документация
+│   ├── en/                     # Английская документация
+│   │   ├── DEPLOYMENT.md       # Инструкция по развертыванию
+│   │   ├── USER_GUIDE.md       # Руководство пользователя
+│   │   ├── QUICKSTART.md       # Быстрый старт
+│   │   └── ...                 # Другие документы
+│   └── ru/                     # Русская документация
+│       ├── ЗАПУСК.txt          # Инструкции по запуску
+│       ├── КАК_ОБНОВИТЬ_КОТИРОВКИ.txt
+│       └── ...                 # Другие документы
+├── scripts/                    # Утилиты и вспомогательные скрипты
+│   ├── check_database.py       # Проверка БД
+│   ├── clear_database.py       # Очистка БД
+│   ├── update_stock_prices.py  # Обновление котировок
+│   └── ...                     # Другие утилиты
+├── src/                        # Основной исходный код
+│   ├── __init__.py
+│   ├── data_loader.py          # Чтение Excel
+│   ├── llm_manager.py          # OpenRouter клиент
+│   ├── analyzer.py             # Логика анализа
+│   ├── database.py             # SQLite база
+│   ├── excel_exporter.py       # Экспорт результатов
+│   ├── company_info.py         # Информация о компаниях
+│   └── dashboards/             # Страницы веб-приложения
+│       ├── overview.py         # Обзор
+│       ├── analysis.py         # Анализ
+│       ├── history.py          # История
+│       ├── accuracy.py         # Точность
+│       └── settings.py         # Настройки
+├── data/                       # Данные
+│   ├── samples/                # Образцы данных
+│   │   └── Stock quotes.xlsx   # Пример файла с котировками
+│   ├── cache/                  # Кэш данных
+│   └── *.db                    # SQLite базы данных
+├── output/                     # Выходные файлы
+│   └── exports/                # Excel отчеты
+├── logs/                       # Логи приложения
+├── deploy/                     # Файлы для развертывания
+│   ├── docker-compose.yml      # Docker Compose конфигурация
+│   └── .env.example            # Пример переменных окружения
+├── .gitignore                  # Игнорируемые файлы
+├── config.yaml                 # Конфигурация (создать из .example)
+├── config.example.yaml         # Пример конфигурации
+├── requirements.txt            # Python зависимости
+├── Dockerfile                  # Docker образ
+├── README.md                   # Этот файл
+├── main.py                     # Точка входа CLI
+├── app.py                      # Точка входа веб-приложения
+└── scheduler.py                # Планировщик задач
 ```
 
 ## 📊 Формат входных данных
