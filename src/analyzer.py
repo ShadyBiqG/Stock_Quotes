@@ -173,7 +173,9 @@ class StockAnalyzer:
                     confidence=result['confidence'],
                     raw_response=result['raw_response'],
                     validation_flags=result['validation_flags'],
-                    tokens_used=result['tokens_used']
+                    tokens_used=result['tokens_used'],
+                    analysis_text=result.get('analysis_text', ''),
+                    key_factors=result.get('key_factors', [])
                 )
         
         # Вычисление консенсуса

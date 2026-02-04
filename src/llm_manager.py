@@ -83,8 +83,16 @@ class OpenRouterClient:
             
             raw_response = response.choices[0].message.content
             tokens_used = response.usage.total_tokens if response.usage else 0
+            finish_reason = response.choices[0].finish_reason
             
-            logger.info(f"Получен ответ от {model_name} ({tokens_used} токенов)")
+            logger.info(f"Получен ответ от {model_name} ({tokens_used} токенов, finish_reason: {finish_reason})")
+            
+            # Проверка на обрезанный ответ
+            if finish_reason == 'length':
+                logger.warning(
+                    f"⚠️ Ответ от {model_name} был обрезан из-за лимита токенов! "
+                    f"Рекомендуется увеличить max_tokens (текущий: {max_tokens})"
+                )
             
             # Парсинг ответа
             parsed = self._parse_response(raw_response)
@@ -92,11 +100,19 @@ class OpenRouterClient:
             # Валидация на галлюцинации
             validation = self._validate_response(raw_response, parsed)
             
+            # Добавляем информацию об обрезке в валидацию
+            if finish_reason == 'length':
+                validation['truncated'] = True
+                validation['trust_level'] = 'LOW'
+                logger.warning(f"Снижение доверия для {model_name} из-за обрезки ответа")
+            
             result = {
                 'model_name': model_name,
                 'model_id': model_id,
                 'prediction': parsed.get('prediction', 'НЕИЗВЕСТНО'),
-                'reasons': parsed.get('reasons', []),
+                'analysis_text': parsed.get('analysis_text', ''),
+                'key_factors': parsed.get('key_factors', []),
+                'reasons': parsed.get('reasons', []),  # Для обратной совместимости
                 'confidence': parsed.get('confidence', 'НИЗКАЯ'),
                 'raw_response': raw_response,
                 'validation_flags': validation,
@@ -164,14 +180,18 @@ class OpenRouterClient:
         """
         tasks = []
         
-        for model in models:
+        for i, model in enumerate(models):
+            # Небольшая задержка между запусками для снижения rate limiting
+            if i > 0:
+                await asyncio.sleep(0.5)  # 500ms между запусками моделей
+            
             task = self.analyze_async(
                 model_id=model['id'],
                 model_name=model['name'],
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=model.get('temperature', 0.3),
-                max_tokens=model.get('max_tokens', 1000)
+                max_tokens=model.get('max_tokens', 2000)  # Увеличенное значение по умолчанию
             )
             tasks.append(task)
         
@@ -208,9 +228,17 @@ class OpenRouterClient:
         """
         parsed = {
             'prediction': 'НЕИЗВЕСТНО',
-            'reasons': [],
+            'analysis_text': '',
+            'key_factors': [],
+            'reasons': [],  # Для обратной совместимости
             'confidence': 'НИЗКАЯ'
         }
+        
+        # Проверка длины ответа
+        if len(response) < 100:
+            logger.warning(
+                f"⚠️ Очень короткий ответ ({len(response)} символов): {response[:50]}..."
+            )
         
         # Парсинг прогноза
         prediction_match = re.search(
@@ -221,16 +249,48 @@ class OpenRouterClient:
         if prediction_match:
             parsed['prediction'] = prediction_match.group(1).upper()
         
-        # Парсинг причин
-        reasons_section = re.search(
-            r'ПРИЧИНЫ:(.*?)(?=УВЕРЕННОСТЬ:|$)',
+        # Парсинг секции АНАЛИЗ
+        analysis_section = re.search(
+            r'АНАЛИЗ:\s*(.*?)(?=КЛЮЧЕВЫЕ ФАКТОРЫ:|УВЕРЕННОСТЬ:|$)',
             response,
             re.DOTALL | re.IGNORECASE
         )
-        if reasons_section:
-            reasons_text = reasons_section.group(1)
-            reasons = re.findall(r'\d+\.\s*(.+?)(?=\n\d+\.|\n\n|$)', reasons_text, re.DOTALL)
-            parsed['reasons'] = [r.strip() for r in reasons if r.strip()]
+        if analysis_section:
+            analysis_text = analysis_section.group(1).strip()
+            # Очистка от лишних символов
+            analysis_text = re.sub(r'\[.*?\]', '', analysis_text)  # Удаляем инструкции в []
+            analysis_text = analysis_text.strip()
+            if analysis_text:
+                parsed['analysis_text'] = analysis_text
+        
+        # Парсинг КЛЮЧЕВЫХ ФАКТОРОВ
+        factors_section = re.search(
+            r'КЛЮЧЕВЫЕ ФАКТОРЫ:\s*(.*?)(?=УВЕРЕННОСТЬ:|$)',
+            response,
+            re.DOTALL | re.IGNORECASE
+        )
+        if factors_section:
+            factors_text = factors_section.group(1)
+            # Ищем строки начинающиеся с • или цифры
+            factors = re.findall(r'[•\-\*]\s*(.+?)(?=\n[•\-\*]|\n\n|$)', factors_text, re.DOTALL)
+            if not factors:
+                # Попробуем через нумерованный список
+                factors = re.findall(r'\d+\.\s*(.+?)(?=\n\d+\.|\n\n|$)', factors_text, re.DOTALL)
+            parsed['key_factors'] = [f.strip() for f in factors if f.strip()]
+        
+        # Парсинг старого формата ПРИЧИНЫ (для обратной совместимости)
+        if not parsed['key_factors']:
+            reasons_section = re.search(
+                r'ПРИЧИНЫ:(.*?)(?=УВЕРЕННОСТЬ:|$)',
+                response,
+                re.DOTALL | re.IGNORECASE
+            )
+            if reasons_section:
+                reasons_text = reasons_section.group(1)
+                reasons = re.findall(r'\d+\.\s*(.+?)(?=\n\d+\.|\n\n|$)', reasons_text, re.DOTALL)
+                parsed['reasons'] = [r.strip() for r in reasons if r.strip()]
+                # Копируем в key_factors для единообразия
+                parsed['key_factors'] = parsed['reasons']
         
         # Парсинг уверенности
         confidence_match = re.search(
@@ -265,9 +325,24 @@ class OpenRouterClient:
             flags['format_valid'] = False
             flags['trust_level'] = 'LOW'
         
-        if not parsed['reasons']:
+        # Проверка наличия анализа или факторов (достаточно одного из них)
+        has_analysis = bool(parsed.get('analysis_text', '').strip())
+        has_factors = bool(parsed.get('key_factors', []))
+        has_reasons = bool(parsed.get('reasons', []))
+        
+        if not (has_analysis or has_factors or has_reasons):
             flags['format_valid'] = False
             flags['trust_level'] = 'LOW'
+        elif has_analysis and (has_factors or has_reasons):
+            # Если есть и анализ, и факторы - отлично!
+            flags['format_valid'] = True
+            flags['trust_level'] = 'HIGH'
+        elif has_analysis or (has_factors and len(parsed.get('key_factors', [])) >= 2):
+            # Если есть анализ или хотя бы 2 фактора - хорошо
+            flags['format_valid'] = True
+            if parsed.get('confidence') == 'НИЗКАЯ':
+                flags['trust_level'] = 'MEDIUM'
+            # Не снижаем trust_level если всё остальное в порядке
         
         # Проверка на подозрительные паттерны
         response_lower = raw_response.lower()

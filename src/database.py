@@ -38,8 +38,12 @@ class Database:
                 self.db_path,
                 detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
             )
+            # Явная настройка UTF-8 для текстовых данных
+            self.conn.text_factory = str
             self.conn.row_factory = sqlite3.Row
             self.cursor = self.conn.cursor()
+            # Установка кодировки UTF-8
+            self.cursor.execute("PRAGMA encoding = 'UTF-8'")
             logger.info(f"Подключение к БД: {self.db_path}")
         except Exception as e:
             logger.error(f"Ошибка подключения к БД: {e}")
@@ -95,6 +99,19 @@ class Database:
                 FOREIGN KEY (stock_id) REFERENCES stocks(id)
             )
         """)
+        
+        # Миграция: добавление новых полей analysis_text и key_factors (если их еще нет)
+        try:
+            self.cursor.execute("SELECT analysis_text FROM analysis_results LIMIT 1")
+        except sqlite3.OperationalError:
+            logger.info("Добавление поля analysis_text в таблицу analysis_results")
+            self.cursor.execute("ALTER TABLE analysis_results ADD COLUMN analysis_text TEXT")
+        
+        try:
+            self.cursor.execute("SELECT key_factors FROM analysis_results LIMIT 1")
+        except sqlite3.OperationalError:
+            logger.info("Добавление поля key_factors в таблицу analysis_results")
+            self.cursor.execute("ALTER TABLE analysis_results ADD COLUMN key_factors TEXT")
         
         # Таблица консенсуса
         self.cursor.execute("""
@@ -306,7 +323,8 @@ class Database:
     def save_analysis(self, stock_id: int, model_name: str, model_id: str,
                       prediction: str, reasons: List[str], confidence: str,
                       raw_response: str, validation_flags: Dict,
-                      tokens_used: int = 0) -> int:
+                      tokens_used: int = 0, analysis_text: str = '',
+                      key_factors: List[str] = None) -> int:
         """
         Сохранить результат анализа
         
@@ -315,26 +333,33 @@ class Database:
             model_name: Название модели
             model_id: ID модели
             prediction: Прогноз (РАСТЕТ/ПАДАЕТ/СТАБИЛЬНА)
-            reasons: Список причин
+            reasons: Список причин (для обратной совместимости)
             confidence: Уверенность (ВЫСОКАЯ/СРЕДНЯЯ/НИЗКАЯ)
             raw_response: Сырой ответ модели
             validation_flags: Флаги валидации
             tokens_used: Использовано токенов
+            analysis_text: Полный текст анализа
+            key_factors: Ключевые факторы
             
         Returns:
             ID записи анализа
         """
+        if key_factors is None:
+            key_factors = []
+        
         self.cursor.execute("""
             INSERT INTO analysis_results 
             (stock_id, model_name, model_id, prediction, reasons, confidence,
-             raw_response, validation_flags, tokens_used)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             raw_response, validation_flags, tokens_used, analysis_text, key_factors)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             stock_id, model_name, model_id, prediction,
             json.dumps(reasons, ensure_ascii=False),
             confidence, raw_response,
             json.dumps(validation_flags, ensure_ascii=False),
-            tokens_used
+            tokens_used,
+            analysis_text,
+            json.dumps(key_factors, ensure_ascii=False)
         ))
         
         self.conn.commit()
@@ -384,7 +409,7 @@ class Database:
                 c.ticker, c.name, c.description, c.sector,
                 s.price, s.change_percent, s.volume, s.analysis_date,
                 ar.model_name, ar.prediction, ar.reasons, ar.confidence,
-                ar.validation_flags, ar.tokens_used
+                ar.validation_flags, ar.tokens_used, ar.analysis_text, ar.key_factors
             FROM analysis_results ar
             JOIN stocks s ON ar.stock_id = s.id
             JOIN companies c ON s.company_id = c.id
@@ -397,7 +422,7 @@ class Database:
             query += " AND c.ticker = ?"
             params.append(ticker)
         
-        query += " ORDER BY c.ticker, ar.model_name"
+        query += " ORDER BY c.ticker, ar.created_at DESC, ar.model_name"
         
         self.cursor.execute(query, params)
         
@@ -416,7 +441,9 @@ class Database:
                 'reasons': json.loads(row['reasons']) if row['reasons'] else [],
                 'confidence': row['confidence'],
                 'validation_flags': json.loads(row['validation_flags']) if row['validation_flags'] else {},
-                'tokens_used': row['tokens_used']
+                'tokens_used': row['tokens_used'],
+                'analysis_text': row['analysis_text'] if 'analysis_text' in row.keys() else '',
+                'key_factors': json.loads(row['key_factors']) if 'key_factors' in row.keys() and row['key_factors'] else []
             })
         
         return results

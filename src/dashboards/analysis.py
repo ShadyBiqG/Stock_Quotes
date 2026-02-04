@@ -59,7 +59,7 @@ def show(config: dict):
     if selected_ticker != "Все":
         results = [r for r in results if r['ticker'] == selected_ticker]
     
-    # Группировка по тикерам
+    # Группировка по тикерам и удаление дубликатов моделей
     stocks_data = {}
     for r in results:
         ticker = r['ticker']
@@ -72,17 +72,26 @@ def show(config: dict):
                 'price': r['price'],
                 'change': r['change'],
                 'volume': r['volume'],
-                'models': []
+                'models': {},  # Используем dict для хранения последнего результата каждой модели
+                'analysis_text': r.get('analysis_text', '')  # Сохраняем полный текст анализа
             }
         
-        stocks_data[ticker]['models'].append({
-            'model_name': r['model_name'],
+        # Сохраняем только последний результат для каждой модели (по model_name)
+        model_name = r['model_name']
+        stocks_data[ticker]['models'][model_name] = {
+            'model_name': model_name,
             'prediction': r['prediction'],
             'reasons': r['reasons'],
+            'key_factors': r.get('key_factors', []),  # Добавляем ключевые факторы
+            'analysis_text': r.get('analysis_text', ''),  # Добавляем текст анализа
             'confidence': r['confidence'],
             'validation': r.get('validation_flags', {}),
             'tokens': r.get('tokens_used', 0)
-        })
+        }
+    
+    # Преобразуем dict моделей обратно в list для удобства отображения
+    for ticker in stocks_data:
+        stocks_data[ticker]['models'] = list(stocks_data[ticker]['models'].values())
     
     # Отображение акций
     for ticker, data in stocks_data.items():
@@ -139,13 +148,25 @@ def show(config: dict):
                     
                     st.markdown(f"**Уверенность:** {confidence_emoji} {model['confidence']}")
                 
-                # Причины
-                if model['reasons']:
+                # Полный текст анализа (если есть)
+                analysis_text = model.get('analysis_text', '')
+                if analysis_text:
+                    st.markdown("**Анализ:**")
+                    st.markdown(analysis_text)
+                
+                # Ключевые факторы
+                key_factors = model.get('key_factors', [])
+                if key_factors:
+                    st.markdown("**Ключевые факторы:**")
+                    for factor in key_factors:
+                        st.markdown(f"• {factor}")
+                elif model['reasons']:
+                    # Fallback на старый формат "причины"
                     st.markdown("**Причины:**")
                     for i, reason in enumerate(model['reasons'], 1):
                         st.markdown(f"{i}. {reason}")
                 else:
-                    st.warning("Причины не указаны")
+                    st.info("ℹ️ Подробный анализ не предоставлен")
                 
                 # Валидация
                 validation = model.get('validation', {})
