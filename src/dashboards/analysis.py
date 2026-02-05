@@ -7,10 +7,51 @@ import pandas as pd
 from datetime import date
 import sys
 from pathlib import Path
+import re
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.database import Database
+
+
+def clean_markdown(text: str) -> str:
+    """
+    Очистка текста от markdown-разметки для единообразного отображения
+    
+    Args:
+        text: Текст с возможной markdown-разметкой
+        
+    Returns:
+        Очищенный текст без форматирования
+    """
+    if not text:
+        return text
+    
+    # Удаляем Streamlit цветовые теги вида :green[текст], :color[текст], :red[текст] и т.д.
+    text = re.sub(r':[a-z]+\[([^\]]+)\]', r'\1', text)
+    
+    # Удаляем HTML теги
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Удаляем markdown жирный текст **текст** или __текст__
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    text = re.sub(r'__([^_]+)__', r'\1', text)
+    
+    # Удаляем markdown курсив *текст* или _текст_
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)
+    text = re.sub(r'_([^_]+)_', r'\1', text)
+    
+    # Удаляем markdown код `текст`
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    
+    # Удаляем markdown ссылки [текст](url)
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    
+    # Удаляем лишние пробелы и переносы строк
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = text.strip()
+    
+    return text
 
 
 def show(config: dict):
@@ -152,14 +193,18 @@ def show(config: dict):
                 analysis_text = model.get('analysis_text', '')
                 if analysis_text:
                     st.markdown("**Анализ:**")
-                    st.markdown(analysis_text)
+                    # Очищаем markdown-разметку для единообразного отображения
+                    cleaned_text = clean_markdown(analysis_text)
+                    st.markdown(cleaned_text)
                 
                 # Ключевые факторы
                 key_factors = model.get('key_factors', [])
                 if key_factors:
                     st.markdown("**Ключевые факторы:**")
                     for factor in key_factors:
-                        st.markdown(f"• {factor}")
+                        # Очищаем markdown-разметку для единообразного отображения
+                        cleaned_factor = clean_markdown(factor)
+                        st.markdown(f"• {cleaned_factor}")
                 elif model['reasons']:
                     # Fallback на старый формат "причины"
                     st.markdown("**Причины:**")
