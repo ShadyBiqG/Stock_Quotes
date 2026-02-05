@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def clear_database(db_path: str = "data/stock_analysis.db", delete_file: bool = False) -> None:
+def clear_database(db_path: str = "data/stocks.db", delete_file: bool = False) -> None:
     """
     Очистка базы данных
     
@@ -60,23 +60,31 @@ def clear_database(db_path: str = "data/stock_analysis.db", delete_file: bool = 
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             
-            # Список всех таблиц для очистки
+            # Список всех таблиц для очистки (порядок важен из-за foreign keys)
             tables = [
                 'accuracy_history',    # Сначала удаляем зависимые таблицы
                 'consensus',
                 'analysis_results',
+                'price_sources',       # v3.0: таблица источников цен
                 'stocks',
                 'companies'            # В последнюю очередь главные таблицы
             ]
             
             # Подсчет записей перед очисткой
             total_records = 0
+            existing_tables = []
+            
             for table in tables:
-                cursor.execute(f"SELECT COUNT(*) FROM {table}")
-                count = cursor.fetchone()[0]
-                total_records += count
-                if count > 0:
-                    print(f"   📊 {table}: {count} записей")
+                try:
+                    cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                    count = cursor.fetchone()[0]
+                    total_records += count
+                    existing_tables.append(table)
+                    if count > 0:
+                        print(f"   📊 {table}: {count} записей")
+                except sqlite3.OperationalError:
+                    # Таблица не существует - пропускаем
+                    pass
             
             print(f"\n   Всего записей: {total_records}")
             
@@ -86,13 +94,16 @@ def clear_database(db_path: str = "data/stock_analysis.db", delete_file: bool = 
                 return
             
             # Очистка таблиц
-            for table in tables:
+            for table in existing_tables:
                 cursor.execute(f"DELETE FROM {table}")
                 logger.info(f"Очищена таблица: {table}")
             
             # Сброс счетчиков автоинкремента
-            for table in tables:
-                cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{table}'")
+            for table in existing_tables:
+                try:
+                    cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{table}'")
+                except sqlite3.OperationalError:
+                    pass
             
             conn.commit()
             conn.close()
@@ -111,7 +122,7 @@ def clear_database(db_path: str = "data/stock_analysis.db", delete_file: bool = 
             raise
 
 
-def show_database_info(db_path: str = "data/stock_analysis.db") -> None:
+def show_database_info(db_path: str = "data/stocks.db") -> None:
     """
     Показать информацию о содержимом БД
     
@@ -140,15 +151,20 @@ def show_database_info(db_path: str = "data/stock_analysis.db") -> None:
             ('stocks', 'Котировки'),
             ('analysis_results', 'Результаты анализа'),
             ('consensus', 'Консенсус'),
-            ('accuracy_history', 'История точности')
+            ('accuracy_history', 'История точности'),
+            ('price_sources', 'Источники цен')
         ]
         
         total_records = 0
         for table, description in tables:
-            cursor.execute(f"SELECT COUNT(*) FROM {table}")
-            count = cursor.fetchone()[0]
-            total_records += count
-            print(f"  {description:25s}: {count:6d} записей")
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                count = cursor.fetchone()[0]
+                total_records += count
+                print(f"  {description:25s}: {count:6d} записей")
+            except sqlite3.OperationalError:
+                # Таблица не существует
+                print(f"  {description:25s}: (таблица отсутствует)")
         
         print(f"\n  {'ИТОГО':25s}: {total_records:6d} записей")
         print("="*60)
@@ -209,8 +225,8 @@ def main():
     
     parser.add_argument(
         '--db-path',
-        default='data/stock_analysis.db',
-        help='Путь к файлу БД (по умолчанию: data/stock_analysis.db)'
+        default='data/stocks.db',
+        help='Путь к файлу БД (по умолчанию: data/stocks.db)'
     )
     
     args = parser.parse_args()

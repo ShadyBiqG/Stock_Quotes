@@ -219,15 +219,18 @@ def show(config: dict):
                 return
         
         else:
-            # Использовать существующий файл
-            default_file = Path("data/samples/Stock quotes.xlsx")
+            # Использовать файл из конфигурации (companies.json)
+            input_file = config.get('input', {}).get('excel_file', 'config/companies.json')
+            default_file = Path(input_file)
+            
             if default_file.exists():
-                st.info(f"📁 Используется существующий файл: {default_file}")
+                st.info(f"📁 Используется файл: {default_file}")
                 
                 try:
-                    # Подключение к БД для загрузки котировок
+                    # Подключение к БД и price_fetcher для загрузки котировок
                     db_preview = Database(config['database']['path'])
-                    stocks = load_stock_data(str(default_file), database=db_preview)
+                    price_fetcher = YahooFinanceFetcher()
+                    stocks = load_stock_data(str(default_file), database=db_preview, price_fetcher=price_fetcher, config=config)
                     db_preview.close()
                     stats = DataLoader.validate_data(stocks)
                     
@@ -249,7 +252,7 @@ def show(config: dict):
                     st.error(f"❌ Ошибка чтения файла: {e}")
                     return
             else:
-                st.warning("⚠️ Файл data/samples/Stock quotes.xlsx не найден. Загрузите файл выше.")
+                st.warning(f"⚠️ Файл {input_file} не найден. Добавьте компании через раздел Конфигурация.")
                 return
         
         st.markdown("---")
@@ -357,34 +360,75 @@ def show(config: dict):
             
             st.markdown("---")
             
-            # Экспорт в Excel
-            st.markdown("#### 📄 Экспорт в Excel")
+            # === УПРОЩЁННЫЙ ЭКСПОРТ (новый формат) ===
+            st.markdown("#### 📄 Упрощённый экспорт (новый формат)")
+            st.info("💡 Формат: Тикер | Компания | Описание | Ответы ИИ (по колонкам) | Итог + График накопленной стоимости")
             
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                filename = st.text_input(
-                    "Имя файла",
-                    value=f"{export_date}_analysis.xlsx"
+                filename_simple = st.text_input(
+                    "Имя файла (упрощённый)",
+                    value=f"{export_date}_simple_analysis.xlsx",
+                    key="filename_simple"
                 )
             
             with col2:
                 st.write("")
                 st.write("")
-                if st.button("💾 Создать Excel", type="primary", use_container_width=True):
+                if st.button("💾 Создать (упрощённый)", type="primary", use_container_width=True, key="btn_simple"):
                     try:
                         exporter = ExcelExporter()
-                        filepath = exporter.export(results, export_date, filename)
+                        filepath = exporter.export_simple(results, export_date, filename_simple, database=db)
                         
                         st.success(f"✅ Файл создан: {filepath}")
                         
                         # Скачивание файла
                         with open(filepath, 'rb') as f:
                             st.download_button(
-                                label="📥 Скачать Excel",
+                                label="📥 Скачать упрощённый Excel",
                                 data=f.read(),
-                                file_name=filename,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                file_name=filename_simple,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key="download_simple"
+                            )
+                    
+                    except Exception as e:
+                        st.error(f"❌ Ошибка экспорта: {e}")
+            
+            st.markdown("---")
+            
+            # === ПОЛНЫЙ ЭКСПОРТ (старый формат) ===
+            st.markdown("#### 📄 Полный экспорт (детальный формат)")
+            st.info("💡 Формат: Сводка + Детали + Анализ качества (3 листа с подробной информацией)")
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                filename_full = st.text_input(
+                    "Имя файла (полный)",
+                    value=f"{export_date}_full_analysis.xlsx",
+                    key="filename_full"
+                )
+            
+            with col2:
+                st.write("")
+                st.write("")
+                if st.button("💾 Создать (полный)", use_container_width=True, key="btn_full"):
+                    try:
+                        exporter = ExcelExporter()
+                        filepath = exporter.export(results, export_date, filename_full)
+                        
+                        st.success(f"✅ Файл создан: {filepath}")
+                        
+                        # Скачивание файла
+                        with open(filepath, 'rb') as f:
+                            st.download_button(
+                                label="📥 Скачать полный Excel",
+                                data=f.read(),
+                                file_name=filename_full,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key="download_full"
                             )
                     
                     except Exception as e:
@@ -717,9 +761,13 @@ def run_analysis(config: dict, selected_models: list, max_retries: int):
         # Инициализация БД сначала
         db = Database(config['database']['path'])
         
-        # Загрузка данных
+        # Загрузка данных из конфигурации (companies.json)
         status_text.text("📂 Загрузка данных...")
-        stocks = load_stock_data("data/samples/Stock quotes.xlsx", database=db)
+        input_file = config.get('input', {}).get('excel_file', 'config/companies.json')
+        
+        # v3.0: Добавляем price_fetcher для автоматического получения котировок
+        price_fetcher = YahooFinanceFetcher()
+        stocks = load_stock_data(input_file, database=db, price_fetcher=price_fetcher, config=config)
         progress_bar.progress(10)
         
         # Фильтрация моделей
